@@ -442,7 +442,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         sizer_spangroups_cb = wx.BoxSizer(wx.HORIZONTAL)
         self.cb_spangroups = wx.CheckBox(advanced_parent, -1, "Use multiple span areas")
         self.cb_spangroups.Bind(wx.EVT_CHECKBOX, self.onCheckboxSpanGroups)
-        self.button_help_spang = wx.BitmapButton(advanced_parent, bitmap=wx.BitmapBundle(help_bmp), name="butt_help_spang")
+        self.button_help_spang = wx.BitmapButton(
+            advanced_parent, bitmap=wx.BitmapBundle(help_bmp), name="butt_help_spang"
+        )
         self.button_help_spang.Bind(wx.EVT_BUTTON, self.onHelpSpanGroups)
         sizer_spangroups_cb.Add(self.cb_spangroups, 0, wx.ALIGN_LEFT | wx.LEFT, 5)
         sizer_spangroups_cb.AddStretchSpacer()
@@ -1083,9 +1085,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def onIdle(self, event):
         leftdown = wx.GetMouseState().LeftIsDown()
-        update = bool(
-            self.resized and not leftdown and self.wpprev_pnl.preview_area_ready()
-        )
+        update = bool(self.resized and not leftdown and self.wpprev_pnl.preview_area_ready())
         if update:
             self.wpprev_pnl.full_refresh_preview(
                 update,
@@ -2332,9 +2332,7 @@ class WallpaperPreviewPanel(wx.Panel):
                         ),
                     )
                 )
-                image_szs.append(
-                    (max(1, round(scaling_fac * res[0])), max(1, round(scaling_fac * res[1])))
-                )
+                image_szs.append((max(1, round(scaling_fac * res[0])), max(1, round(scaling_fac * res[1]))))
                 if bez[0] != 0:
                     right_bez = (
                         round(scaling_fac * bez[0]),
