@@ -58,6 +58,12 @@ def _usable_image(filename, original_size):
             or candidate.width * candidate.height > MAX_OUTPUT_PIXELS
         ):
             return None
+        # AI outputs must represent the complete original image, not a
+        # cropped or letterboxed scene that would invalidate saved framing.
+        x_scale = candidate.width / original_size[0]
+        y_scale = candidate.height / original_size[1]
+        if abs(x_scale - y_scale) > 0.01 * max(x_scale, y_scale):
+            return None
         candidate.load()
         return candidate.convert("RGBA" if candidate.mode == "RGBA" else "RGB")
 

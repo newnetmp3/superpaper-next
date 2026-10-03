@@ -26,6 +26,7 @@ from screeninfo import get_monitors
 import superpaper.perspective as persp
 import superpaper.sp_logging as sp_logging
 from superpaper.cloud_upscale import prepare_cloud_upscaled_image
+from superpaper.preview_geometry import original_frame_box
 from superpaper.message_dialog import show_message_dialog
 from superpaper.sp_paths import CONFIG_PATH, TEMP_PATH
 from superpaper.sp_platform import IS_LINUX, IS_MACOS, IS_WINDOWS, host_spawn_env
@@ -948,6 +949,7 @@ def resize_to_fill(
     quality: str | Image.Resampling = Image.Resampling.LANCZOS,
     zoom=1.0,
     offset=(0.0, 0.0),
+    reference_size=None,
 ):
     """Resize image to fill given rectangle and do a positioned crop to size.
 
@@ -957,6 +959,11 @@ def resize_to_fill(
     [-1.0, 1.0] that slides the crop window within the available overflow:
     0.0 keeps the default centered crop, -1.0 aligns to the left/top edge and
     +1.0 aligns to the right/bottom edge. The result always fills ``res``.
+
+    If the image was enhanced, pass the oriented original source dimensions as
+    reference_size. The cropped region is then mapped from original-image
+    coordinates into the enhanced image, avoiding different framing after
+    cloud processing.
     """
     if quality == "fast":
         quality = Image.Resampling.HAMMING
@@ -982,6 +989,17 @@ def resize_to_fill(
         offset_x, offset_y = 0.0, 0.0
 
     image_size = img.size  # returns image (width,height)
+    if reference_size is not None and tuple(reference_size) != tuple(image_size):
+        source_box = original_frame_box(reference_size, res, zoom, (offset_x, offset_y))
+        x_factor = image_size[0] / reference_size[0]
+        y_factor = image_size[1] / reference_size[1]
+        enhanced_box = (
+            source_box[0] * x_factor,
+            source_box[1] * y_factor,
+            source_box[2] * x_factor,
+            source_box[3] * y_factor,
+        )
+        return img.resize(res, resample=quality, box=enhanced_box, reducing_gap=reducing_gap)
     if image_size == res and zoom == 1.0 and offset_x == 0.0 and offset_y == 0.0:
         # input image is already of the correct size, no action needed.
         return img
@@ -1185,6 +1203,7 @@ def span_single_image_simple(profile, force):
         )
         return
     canvas_tuple = tuple(compute_canvas(RESOLUTION_ARRAY, DISPLAY_OFFSET_ARRAY))
+    source_size = img.size
     img = prepare_cloud_upscaled_image(
         img,
         file,
@@ -1193,7 +1212,9 @@ def span_single_image_simple(profile, force):
         enabled=getattr(profile, "cloud_upscale", False),
         cache_root=TEMP_PATH,
     )
-    img_resize = resize_to_fill(img, canvas_tuple, zoom=profile.zoom, offset=profile.offsets)
+    img_resize = resize_to_fill(
+        img, canvas_tuple, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
+    )
 
     outputfile, outputfile_old = alternating_outputfile(profile.name)
     img_resize.save(outputfile, quality=95)  # set quality if jpg is used, png unaffected
@@ -1298,6 +1319,7 @@ def span_single_image_advanced(profile, force):
             # Canvas containing ppi normalized displays
             canvas_tuple_trgt = tuple(compute_working_canvas(grp_crops))
             sp_logging.G_LOGGER.info("Back-projected canvas size: %s", canvas_tuple_proj)
+            source_size = img.size
             upscaled = prepare_cloud_upscaled_image(
                 img,
                 source_file,
@@ -1306,7 +1328,9 @@ def span_single_image_advanced(profile, force):
                 enabled=getattr(profile, "cloud_upscale", False),
                 cache_root=TEMP_PATH,
             )
-            img_workingsize = resize_to_fill(upscaled, canvas_tuple_proj, zoom=profile.zoom, offset=profile.offsets)
+            img_workingsize = resize_to_fill(
+                upscaled, canvas_tuple_proj, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
+            )
             for _crop_tup, coeffs, ppin_crop, (i_res, res) in zip(
                 proj_plane_crops, persp_coeffs, grp_crops, enumerate(grp_res_arr)
             ):
@@ -1334,6 +1358,7 @@ def span_single_image_advanced(profile, force):
             # Image is now the height of the eff tallest display + possible manual
             # offsets and the width of the combined eff widths + possible manual
             # offsets.
+            source_size = img.size
             upscaled = prepare_cloud_upscaled_image(
                 img,
                 source_file,
@@ -1342,7 +1367,9 @@ def span_single_image_advanced(profile, force):
                 enabled=getattr(profile, "cloud_upscale", False),
                 cache_root=TEMP_PATH,
             )
-            img_workingsize = resize_to_fill(upscaled, canvas_tuple_eff, zoom=profile.zoom, offset=profile.offsets)
+            img_workingsize = resize_to_fill(
+                upscaled, canvas_tuple_eff, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
+            )
             # Simultaneously make crops at working size and then resize down to actual
             # resolution from RESOLUTION_ARRAY as needed.
             for crop_tup, (i_res, res) in zip(grp_crops, enumerate(grp_res_arr)):
@@ -1403,6 +1430,7 @@ def set_multi_image_wallpaper(profile, force):
                 file,
             )
             return
+        source_size = image.size
         upscaled = prepare_cloud_upscaled_image(
             image,
             file,
@@ -1411,7 +1439,9 @@ def set_multi_image_wallpaper(profile, force):
             enabled=getattr(profile, "cloud_upscale", False),
             cache_root=TEMP_PATH,
         )
-        img_resized.append(resize_to_fill(upscaled, res, zoom=profile.zoom, offset=profile.offsets))
+        img_resized.append(
+            resize_to_fill(upscaled, res, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size)
+        )
     canvas_tuple = tuple(compute_canvas(RESOLUTION_ARRAY, DISPLAY_OFFSET_ARRAY))
     combined_image = Image.new("RGB", canvas_tuple, color=0)
     combined_image.load()
