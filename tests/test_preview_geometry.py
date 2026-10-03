@@ -2,7 +2,14 @@
 
 import pytest
 
-from superpaper.preview_geometry import fit_preview_canvas, has_positive_area, usable_preview_area
+from superpaper.preview_geometry import (
+    crop_overflow,
+    fit_preview_canvas,
+    has_positive_area,
+    pan_offset_for_drag,
+    usable_preview_area,
+    wheel_scroll_units,
+)
 
 
 @pytest.mark.parametrize("size", [(0, 400), (1080, 0), (-1, 10), (31, 500), (100, 31)])
@@ -45,3 +52,41 @@ def test_canvas_centered_in_preview():
 def test_fit_rejects_invalid_geometry(canvas, work):
     with pytest.raises(ValueError):
         fit_preview_canvas(canvas, work)
+
+
+def test_dragging_right_moves_wallpaper_right_not_crop_window():
+    assert pan_offset_for_drag((0.0, 0.0), (25, 0), (100, 0)) == (-0.5, 0.0)
+
+
+def test_dragging_clamps_to_edges_without_blank_space():
+    assert pan_offset_for_drag((0.0, 0.0), (999, -999), (200, 200)) == (-1.0, 1.0)
+
+
+def test_no_overflow_keeps_original_axis():
+    result = pan_offset_for_drag((0.3, 0.2), (30, 90), (120, 0))
+    assert result[0] == pytest.approx(-0.2)
+    assert result[1] == pytest.approx(0.2)
+
+
+@pytest.mark.parametrize(
+    ("image", "target", "zoom", "expected"),
+    [
+        ((1920, 1080), (960, 540), 1.0, (0, 0)),
+        ((1920, 1080), (960, 540), 2.0, (960, 540)),
+        ((1920, 1080), (600, 600), 1.0, (467, 0)),
+    ],
+)
+def test_overflow_matches_cover_crop(image, target, zoom, expected):
+    assert crop_overflow(image, target, zoom) == expected
+
+
+def test_wheel_scrolls_entire_window_for_notches():
+    assert wheel_scroll_units(-120, 120, 3) == (3, 0.0)
+    assert wheel_scroll_units(120, 120, 3) == (-3, 0.0)
+
+
+def test_wheel_retains_partial_steps():
+    first = wheel_scroll_units(-15, 120, 3)
+    second = wheel_scroll_units(-30, 120, 3, first[1])
+    assert first == (0, 0.375)
+    assert second == (1, 0.125)
