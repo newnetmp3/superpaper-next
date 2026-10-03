@@ -1083,7 +1083,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def onIdle(self, event):
         leftdown = wx.GetMouseState().LeftIsDown()
-        update = bool(self.resized and not leftdown and self.wpprev_pnl.preview_area_ready())
+        update = bool(
+            self.resized and not leftdown and self.wpprev_pnl.preview_area_ready()
+        )
         if update:
             self.wpprev_pnl.full_refresh_preview(
                 update,
@@ -2330,7 +2332,9 @@ class WallpaperPreviewPanel(wx.Panel):
                         ),
                     )
                 )
-                image_szs.append((max(1, round(scaling_fac * res[0])), max(1, round(scaling_fac * res[1]))))
+                image_szs.append(
+                    (max(1, round(scaling_fac * res[0])), max(1, round(scaling_fac * res[1])))
+                )
                 if bez[0] != 0:
                     right_bez = (
                         round(scaling_fac * bez[0]),
