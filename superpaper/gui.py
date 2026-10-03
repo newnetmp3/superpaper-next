@@ -32,7 +32,14 @@ from superpaper.data import (
     save_managed_profile,
 )
 from superpaper.message_dialog import show_message_dialog
-from superpaper.preview_geometry import fit_preview_canvas, has_positive_area, usable_preview_area
+from superpaper.preview_geometry import (
+    crop_overflow,
+    fit_preview_canvas,
+    has_positive_area,
+    pan_offset_for_drag,
+    usable_preview_area,
+    wheel_scroll_units,
+)
 from superpaper.profile_id import ProfileId, ProfileIdError
 from superpaper.source_paths import source_identity
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
@@ -99,6 +106,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         BMP_SIZE = 32
         self.tsize = (BMP_SIZE, BMP_SIZE)
         self.image_list = wx.ImageList(BMP_SIZE, BMP_SIZE)
+        self._source_wheel_remainder = 0.0
 
         # top half
         self.resized = False
@@ -384,6 +392,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.path_listctrl.SetImageList(self.image_list, wx.IMAGE_LIST_SMALL)
         self.path_listctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.onWallpaperItemSelected)
         self.path_listctrl.Bind(wx.EVT_SIZE, self._on_sources_resize)
+        self.path_listctrl.Bind(wx.EVT_MOUSEWHEEL, self._on_paths_wheel)
 
         self.sizer_setting_paths.Add(st_paths_info, 0, wx.ALIGN_LEFT | wx.ALL, 5)
         self.sizer_setting_paths.Add(self.path_listctrl, 1, wx.CENTER | wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 5)
@@ -393,6 +402,15 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.button_remove_source = wx.Button(self.statbox_parent_paths, label="Remove selected")
         self.button_browse.Bind(wx.EVT_BUTTON, self.onBrowsePaths)
         self.button_remove_source.Bind(wx.EVT_BUTTON, self.onRemoveSource)
+        # Wheel input over the entire source group belongs to the outer window,
+        # not just to the wx.ListCtrl that would otherwise consume it.
+        for control in (
+            self.statbox_parent_paths,
+            st_paths_info,
+            self.button_browse,
+            self.button_remove_source,
+        ):
+            control.Bind(wx.EVT_MOUSEWHEEL, self._on_paths_wheel)
         self.sizer_setting_paths_buttons.Add(self.button_browse, 0, wx.CENTER | wx.ALL, 5)
         self.sizer_setting_paths_buttons.Add(self.button_remove_source, 0, wx.CENTER | wx.ALL, 5)
         # add button sizer to parent paths sizer
@@ -1021,6 +1039,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.path_listctrl.SetImageList(self.image_list, wx.IMAGE_LIST_SMALL)
             self.path_listctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.onWallpaperItemSelected)
             self.path_listctrl.Bind(wx.EVT_SIZE, self._on_sources_resize)
+            self.path_listctrl.Bind(wx.EVT_MOUSEWHEEL, self._on_paths_wheel)
             self.sizer_setting_paths.Insert(1, self.path_listctrl, 1, wx.CENTER | wx.EXPAND | wx.ALL, 5)
             self.path_listctrl.InvalidateBestSize()
             # self.sizer_setting_paths.SetItemMinSize(self.path_listctrl, (1000, -1))
@@ -1066,6 +1085,32 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
     #
     # Event methods
     #
+    def _on_paths_wheel(self, event):
+        """Always scroll the enclosing settings window over wallpaper paths."""
+        if event.ControlDown() or event.ShiftDown():
+            event.Skip()
+            return
+        units, self._source_wheel_remainder = wheel_scroll_units(
+            event.GetWheelRotation(),
+            event.GetWheelDelta(),
+            event.GetLinesPerAction(),
+            self._source_wheel_remainder,
+        )
+        if units:
+            x, y = self.GetViewStart()
+            self.Scroll(x, y + units)
+
+    def on_wallpaper_dragged(self, offsets):
+        """Synchronize dragging with the persisted zoom/offset controls."""
+        if not (self.sld_offx.IsEnabled() and self.sld_offy.IsEnabled()):
+            return
+        x = round(offsets[0] * 100)
+        y = round(offsets[1] * 100)
+        if (x, y) != (self.sld_offx.GetValue(), self.sld_offy.GetValue()):
+            self.sld_offx.SetValue(x)
+            self.sld_offy.SetValue(y)
+            self.onZoomOffsetChange(None)
+
     def onZoomOffsetChange(self, event):
         """Live-update the preview as zoom/position sliders move."""
         zoom_pct = self.sld_zoom.GetValue()
@@ -1932,6 +1977,7 @@ class WallpaperPreviewPanel(wx.Panel):
         self._last_use_ppi = use_ppi_px
         self._last_use_multi = use_multi_image
         self._last_spangroups = None
+        self._background_drag = None
 
         # Draw preview
         self.draw_displays()
@@ -1943,6 +1989,9 @@ class WallpaperPreviewPanel(wx.Panel):
         self.draggable_shapes = []
         self.positions_dragged = False
         self.Bind(wx.EVT_PAINT, self.OnPaint)
+        self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self._on_background_capture_lost)
+        self.bind_background_drag()
+        self.SetToolTip("Drag the image to reposition it; zoom in for more movement.")
 
     def preview_area_ready(self):
         """Only create preview bitmaps after wx has a usable panel size."""
@@ -2632,18 +2681,25 @@ class WallpaperPreviewPanel(wx.Panel):
         if enable_movement:
             self.bind_movement_binds(True)
 
+    def bind_background_drag(self):
+        """Enable picture panning while display arrangement is inactive."""
+        self.Bind(wx.EVT_LEFT_DOWN, self._on_background_down)
+        self.Bind(wx.EVT_LEFT_UP, self._on_background_up)
+        self.Bind(wx.EVT_MOTION, self._on_background_motion)
+
     def bind_movement_binds(self, toggle):
-        """Bind or unbind DragImage dragging bindings."""
+        """Keep dragging monitors separate from dragging the wallpaper."""
+        for event_type in (wx.EVT_LEFT_DOWN, wx.EVT_LEFT_UP, wx.EVT_MOTION):
+            self.Unbind(event_type)
         if toggle:
+            self._finish_background_drag()
             self.Bind(wx.EVT_LEFT_DOWN, self.OnLeftDown)
             self.Bind(wx.EVT_LEFT_UP, self.OnLeftUp)
             self.Bind(wx.EVT_MOTION, self.OnMotion)
             self.Bind(wx.EVT_LEAVE_WINDOW, self.OnLeaveWindow)
         else:
-            self.Unbind(wx.EVT_LEFT_DOWN)
-            self.Unbind(wx.EVT_LEFT_UP)
-            self.Unbind(wx.EVT_MOTION)
             self.Unbind(wx.EVT_LEAVE_WINDOW)
+            self.bind_background_drag()
 
     def draw_shapes(self, dc):
         for shape in self.draggable_shapes:
@@ -2710,6 +2766,78 @@ class WallpaperPreviewPanel(wx.Panel):
             self.draw_shapes(dc)
         else:
             self.draw_st_bmps(dc)
+
+    def _drag_target(self, point):
+        """Find the displayed image and crop rectangle under the mouse."""
+        if not self.current_preview_images or self.config_mode or self.bezel_conifg_mode:
+            return None
+        if self.use_multi_image or (self._last_use_ppi and self._last_spangroups):
+            for index, (size, position) in enumerate(self.display_rel_sizes):
+                x, y = position
+                if x <= point.x < x + size[0] and y <= point.y < y + size[1]:
+                    if self.use_multi_image and not self._last_spangroups:
+                        image_index = min(index, len(self.current_preview_images) - 1)
+                        return self.current_preview_images[image_index], size
+                    for group_index, group in enumerate(self._last_spangroups):
+                        if index in self._last_spangroups[group]:
+                            displays = [self.display_rel_sizes[i] for i in self._last_spangroups[group]]
+                            canvas_size, _position = self.canvas_display_group(displays, (0, 0))
+                            image_index = min(group_index, len(self.current_preview_images) - 1)
+                            return self.current_preview_images[image_index], canvas_size
+            return None
+        size = self.dtop_canvas_relsz
+        x, y = self.dtop_canvas_pos
+        if x <= point.x < x + size[0] and y <= point.y < y + size[1]:
+            return self.current_preview_images[0], size
+        return None
+
+    def _on_background_down(self, event):
+        if not (self.frame.sld_offx.IsEnabled() and self.frame.sld_offy.IsEnabled()):
+            event.Skip()
+            return
+        target = self._drag_target(event.GetPosition())
+        if target is None:
+            event.Skip()
+            return
+        path, size = target
+        try:
+            with Image.open(path) as image:
+                overflow = crop_overflow(image.size, size, self.zoom)
+        except OSError, ValueError:
+            event.Skip()
+            return
+        if not any(overflow):
+            event.Skip()
+            return
+        self._background_drag = (event.GetPosition(), self.offset, overflow)
+        self.CaptureMouse()
+        self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+
+    def _on_background_motion(self, event):
+        if self._background_drag is None or not event.LeftIsDown():
+            event.Skip()
+            return
+        start, offsets, overflow = self._background_drag
+        point = event.GetPosition()
+        moved = (point.x - start.x, point.y - start.y)
+        self.frame.on_wallpaper_dragged(pan_offset_for_drag(offsets, moved, overflow))
+
+    def _finish_background_drag(self):
+        self._background_drag = None
+        if self.HasCapture():
+            self.ReleaseMouse()
+        self.SetCursor(wx.NullCursor)
+
+    def _on_background_up(self, event):
+        if self._background_drag is not None:
+            self._finish_background_drag()
+        else:
+            event.Skip()
+
+    def _on_background_capture_lost(self, event):
+        self._background_drag = None
+        self.SetCursor(wx.NullCursor)
+        event.Skip()
 
     def OnLeftDown(self, evt):
         # Did the mouse go down on one of our shapes?
