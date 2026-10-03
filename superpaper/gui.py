@@ -402,6 +402,15 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.button_remove_source = wx.Button(self.statbox_parent_paths, label="Remove selected")
         self.button_browse.Bind(wx.EVT_BUTTON, self.onBrowsePaths)
         self.button_remove_source.Bind(wx.EVT_BUTTON, self.onRemoveSource)
+        # Wheel input over the entire source group belongs to the outer window,
+        # not just to the wx.ListCtrl that would otherwise consume it.
+        for control in (
+            self.statbox_parent_paths,
+            st_paths_info,
+            self.button_browse,
+            self.button_remove_source,
+        ):
+            control.Bind(wx.EVT_MOUSEWHEEL, self._on_paths_wheel)
         self.sizer_setting_paths_buttons.Add(self.button_browse, 0, wx.CENTER | wx.ALL, 5)
         self.sizer_setting_paths_buttons.Add(self.button_remove_source, 0, wx.CENTER | wx.ALL, 5)
         # add button sizer to parent paths sizer
