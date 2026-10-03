@@ -90,17 +90,12 @@ def xdg_path_setup(xdg_var, fallback_path) -> str:
     """
 
     xdg_home = os.environ.get(xdg_var)
-    if xdg_home and os.path.isdir(xdg_home):
-        xdg_path = os.path.join(xdg_home, "superpaper")
-    else:
-        xdg_path = os.path.join(fallback_path, "superpaper")
-    # Check that the path exists and otherwise make it.
-    if os.path.isdir(xdg_path):
-        return xdg_path
-    else:
-        # default path didn't exist
-        os.mkdir(xdg_path)
-        return xdg_path
+    # The user may configure an XDG base that does not exist yet. Create its
+    # parent directories too, including the default ~/.cache on fresh accounts.
+    base_path = xdg_home if xdg_home and os.path.isabs(xdg_home) else fallback_path
+    xdg_path = os.path.join(base_path, "superpaper")
+    os.makedirs(xdg_path, exist_ok=True)
+    return xdg_path
 
 
 def test_full_write_access(path):
