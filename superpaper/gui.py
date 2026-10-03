@@ -392,7 +392,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.path_listctrl.SetImageList(self.image_list, wx.IMAGE_LIST_SMALL)
         self.path_listctrl.Bind(wx.EVT_LIST_ITEM_SELECTED, self.onWallpaperItemSelected)
         self.path_listctrl.Bind(wx.EVT_SIZE, self._on_sources_resize)
-            self.path_listctrl.Bind(wx.EVT_MOUSEWHEEL, self._on_paths_wheel)
+        self.path_listctrl.Bind(wx.EVT_MOUSEWHEEL, self._on_paths_wheel)
 
         self.sizer_setting_paths.Add(st_paths_info, 0, wx.ALIGN_LEFT | wx.ALL, 5)
         self.sizer_setting_paths.Add(self.path_listctrl, 1, wx.CENTER | wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 5)
