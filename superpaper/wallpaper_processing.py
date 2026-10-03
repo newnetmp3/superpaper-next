@@ -26,8 +26,8 @@ from screeninfo import get_monitors
 import superpaper.perspective as persp
 import superpaper.sp_logging as sp_logging
 from superpaper.cloud_upscale import prepare_cloud_upscaled_image
-from superpaper.preview_geometry import original_frame_box
 from superpaper.message_dialog import show_message_dialog
+from superpaper.preview_geometry import original_frame_box
 from superpaper.sp_paths import CONFIG_PATH, TEMP_PATH
 from superpaper.sp_platform import IS_LINUX, IS_MACOS, IS_WINDOWS, host_spawn_env
 
