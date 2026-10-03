@@ -124,7 +124,8 @@ def prepare_cloud_upscaled_image(image, source_path, target_size, *, zoom, enabl
             os.replace(stage, cached)
         finally:
             stage.unlink(missing_ok=True)
-        return enhanced
     except Exception as error:
         LOGGER.warning("Cloud upscale unavailable; using original wallpaper: %s", error)
         return image
+    else:
+        return enhanced

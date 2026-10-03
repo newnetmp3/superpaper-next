@@ -42,7 +42,7 @@ def test_cache_reused_across_renamed_profiles(tmp_path, monkeypatch):
         return str(output)
 
     monkeypatch.setattr(cloud_upscale, "_request_remote_upscale", fake_request)
-    kwargs = dict(zoom=1, enabled=True, cache_root=tmp_path)
+    kwargs = {"zoom": 1, "enabled": True, "cache_root": tmp_path}
     first = cloud_upscale.prepare_cloud_upscaled_image(image, source, (180, 100), **kwargs)
     second = cloud_upscale.prepare_cloud_upscaled_image(image, source, (180, 100), **kwargs)
     assert first.size == second.size == (200, 120)
@@ -55,7 +55,7 @@ def test_offline_or_bad_remote_result_falls_back(tmp_path, monkeypatch):
     image.save(source)
 
     def down(*args):
-        raise ConnectionError("Space is down")
+        raise ConnectionError
 
     monkeypatch.setattr(cloud_upscale, "_request_remote_upscale", down)
     output = cloud_upscale.prepare_cloud_upscaled_image(

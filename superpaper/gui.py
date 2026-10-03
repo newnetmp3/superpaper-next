@@ -342,7 +342,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         zoom_grid.Add(self.st_offy_val, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
         self.sizer_setting_zoom.Add(zoom_grid, 0, wx.EXPAND | wx.ALL, 5)
 
-        self.cb_cloud_upscale = wx.CheckBox(statbox_parent_zoom, -1, "Cloud AI upscale low-resolution images")
+        self.cb_cloud_upscale = wx.CheckBox(statbox_parent_zoom, -1, "Cloud AI upscale (uploads images)")
         self.cb_cloud_upscale.SetToolTip(
             "When enabled, small wallpaper images are uploaded to a third-party Hugging Face "
             "Real-ESRGAN Space. Uses free limited GPU time; no AI model is installed locally. "
