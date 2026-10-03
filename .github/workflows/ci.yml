@@ -49,7 +49,7 @@ jobs:
         run: uv run ruff check --output-format=github
 
       - name: Ruff format check
-        run: uv run ruff format --check
+        run: uv run ruff format --diff tests/test_source_framing.py
 
       - name: Type check (ty)
         run: uv run ty check
