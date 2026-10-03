@@ -78,6 +78,24 @@ class ConfigFrame(wx.Frame):
 class WallpaperSettingsPanel(wx.ScrolledWindow):
     """This class defines the wallpaper config dialog UI."""
 
+    def ShouldScrollToChildOnFocus(self, child):
+        """Retain the user's scroll position when a child control gains focus.
+
+        wx.ScrolledWindow ordinarily jumps to the focused child when focus
+        returns to the window. Wallpaper paths and other controls may be far
+        below the current viewport, so this used to snap the page to the end
+        simply by moving the pointer out and back.
+        """
+        return False
+
+    def SendAutoScrollEvents(self, event):
+        """Never scroll the settings window just because a drag leaves it.
+
+        Explicit wheel movement and scrollbar manipulation still use the
+        normal wx.ScrolledWindow code paths.
+        """
+        return False
+
     def __init__(self, parent, parent_tray_obj):
         wx.ScrolledWindow.__init__(self, parent, style=wx.VSCROLL)
         self.SetScrollRate(0, 20)
