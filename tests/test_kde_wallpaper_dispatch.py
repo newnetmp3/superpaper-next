@@ -13,9 +13,7 @@ import pytest
         (None, "true", None),
     ],
 )
-def test_kde_session_dispatch_uses_plasma(
-    profile_modules, monkeypatch, desktop_session, full_session, session_desktop
-):
+def test_kde_session_dispatch_uses_plasma(profile_modules, monkeypatch, desktop_session, full_session, session_desktop):
     _, wpproc = profile_modules
     for key, value in (
         ("DESKTOP_SESSION", desktop_session),
@@ -37,16 +35,12 @@ def test_kde_session_dispatch_uses_plasma(
         "kdeplasma_actions",
         lambda outputfile, **kwargs: plasma_calls.append((outputfile, kwargs)),
     )
-    monkeypatch.setattr(
-        wpproc.subprocess, "run", lambda *args, **kwargs: fallback_calls.append((args, kwargs))
-    )
+    monkeypatch.setattr(wpproc.subprocess, "run", lambda *args, **kwargs: fallback_calls.append((args, kwargs)))
 
     assert wpproc.running_kde()
     wpproc.set_wallpaper_linux("/tmp/my wallpaper.png", force=True)
 
-    assert plasma_calls == [
-        ("/tmp/my wallpaper.png", {"force": True, "profile_name": "Work"})
-    ]
+    assert plasma_calls == [("/tmp/my wallpaper.png", {"force": True, "profile_name": "Work"})]
     assert fallback_calls == []
 
 
@@ -84,6 +78,4 @@ def test_custom_wallpaper_command_overrides_kde_backend(profile_modules, monkeyp
     wpproc.set_wallpaper_linux("/tmp/wallpaper.png")
 
     assert not plasma_calls
-    assert [command for command, _kwargs in commands] == [
-        ["setter", "--file", "/tmp/wallpaper.png"]
-    ]
+    assert [command for command, _kwargs in commands] == [["setter", "--file", "/tmp/wallpaper.png"]]

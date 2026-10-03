@@ -7,7 +7,7 @@ The repository uses GitHub Actions for three complementary checks:
   the system calls rather than changing a real desktop wallpaper.
 - **Distribution smoke test:** Build a Python wheel, install it into an isolated
   Python 3.14 environment, verify the packaged icons, and run the CLI help entry
-  point. This catches missing package assets and startup import errors.
+  point. This catches missing package assets and first-run startup errors.
 - **CodeQL:** Analyze Python code using the extended security query set on PRs,
   pushes to `master`/`ci/**`, and weekly on Sundays. Alerts appear under
   GitHub's Security / Code scanning when code scanning is enabled.
