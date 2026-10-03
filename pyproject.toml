@@ -52,6 +52,9 @@ gui = ["wxPython>=4.2.5"]
 # Linux desktop integration. dbus-python builds from source and needs the system
 # libdbus + glib development headers present (see docs/installation-linux.md).
 linux = ["dbus-python>=1.4.0"]
+# Lightweight HTTP/Gradio client only; models and inference run on the public Space.
+# No PyTorch, CUDA, or model files are required on the user's computer.
+upscale-cloud = ["gradio_client>=1.13.0"]
 
 [project.urls]
 Homepage = "https://github.com/hhannine/superpaper"
