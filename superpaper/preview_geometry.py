@@ -8,6 +8,10 @@ they can be regression-tested in headless CI.
 MIN_PREVIEW_SIDE = 32
 
 
+class PreviewGeometryError(ValueError):
+    """Reject invalid preview dimensions."""
+
+
 def has_positive_area(size):
     """A wx.Bitmap requires both dimensions to be strictly positive."""
     return size[0] > 0 and size[1] > 0
@@ -21,7 +25,7 @@ def usable_preview_area(size):
 def fit_preview_canvas(canvas_size, work_size):
     """Return (scaled size, centered position, scale) with valid pixel sizes."""
     if not has_positive_area(canvas_size) or not has_positive_area(work_size):
-        raise ValueError("Preview canvas and panel dimensions must be positive.")
+        raise PreviewGeometryError
 
     scale = min(
         0.9 * work_size[0] / canvas_size[0],
