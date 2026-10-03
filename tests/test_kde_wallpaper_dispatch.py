@@ -54,9 +54,7 @@ def test_kde_piecewise_dispatch_preserves_monitor_order(profile_modules, monkeyp
     monkeypatch.setattr(
         wpproc,
         "kdeplasma_actions",
-        lambda outputfile, image_piece_list=None, **kwargs: calls.append(
-            (outputfile, image_piece_list, kwargs)
-        ),
+        lambda outputfile, image_piece_list=None, **kwargs: calls.append((outputfile, image_piece_list, kwargs)),
     )
     images = ["/tmp/left.png", "/tmp/right.png"]
 
@@ -71,9 +69,7 @@ def test_custom_wallpaper_command_overrides_kde_backend(profile_modules, monkeyp
     plasma_calls = []
     commands = []
     monkeypatch.setattr(wpproc, "kdeplasma_actions", lambda *args, **kwargs: plasma_calls.append(args))
-    monkeypatch.setattr(
-        wpproc.subprocess, "run", lambda command, **kwargs: commands.append((command, kwargs))
-    )
+    monkeypatch.setattr(wpproc.subprocess, "run", lambda command, **kwargs: commands.append((command, kwargs)))
 
     wpproc.set_wallpaper_linux("/tmp/wallpaper.png")
 
