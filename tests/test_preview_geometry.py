@@ -1,5 +1,8 @@
 """Regression tests for early wx layout and subpixel bezel dimensions."""
 
+import ast
+from pathlib import Path
+
 import pytest
 
 from superpaper.preview_geometry import (
@@ -90,3 +93,26 @@ def test_wheel_retains_partial_steps():
     second = wheel_scroll_units(-30, 120, 3, first[1])
     assert first == (0, 0.375)
     assert second == (1, 0.125)
+
+
+def test_settings_panel_does_not_scroll_due_to_focus_or_mouse_exit():
+    """Guard the wx.ScrolledWindow overrides without importing wx in CI."""
+    source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    panel = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperSettingsPanel"
+    )
+
+    for method_name in ("ShouldScrollToChildOnFocus", "SendAutoScrollEvents"):
+        method = next(
+            node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == method_name
+        )
+        result = method.body[-1]
+        assert isinstance(result, ast.Return)
+        assert isinstance(result.value, ast.Constant)
+        assert result.value.value is False
+
+
+def test_no_wheel_rotation_does_not_move_the_scroll_position():
+    """Entering a window without wheel movement must not trigger scrolling."""
+    assert wheel_scroll_units(0, 120, 3) == (0, 0.0)
