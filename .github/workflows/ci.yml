@@ -9,8 +9,9 @@ name: CI
 
 on:
   push:
-    branches: [master, 'fix/**']
+    branches: [master, "ci/**", "fix/**"]
   pull_request:
+  workflow_dispatch:
 
 # Least-privilege: the lint job only needs to read the repo.
 permissions:
@@ -53,5 +54,34 @@ jobs:
       - name: Type check (ty)
         run: uv run ty check
 
-      - name: Test
-        run: uv run pytest
+      - name: Run headless functionality tests
+        run: uv run pytest -q --durations=10
+
+  package:
+    name: Build and check distributable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up uv and Python 3.14
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Build wheel
+        run: uv build --wheel --out-dir dist
+
+      - name: Verify package resources from installed wheel
+        run: |
+          uv run --no-project --python 3.14 --with ./dist/*.whl python -c '
+          from importlib.resources import files
+          package = files("superpaper")
+          for name in ("resources/superpaper.png", "resources/superpaper.svg"):
+              assert package.joinpath(name).is_file(), f"Missing packaged asset: {name}"
+          print("Package assets present")
+          '
+
+      - name: Smoke-test installed command-line entry point
+        run: uv run --no-project --python 3.14 --with ./dist/*.whl python -m superpaper --help
