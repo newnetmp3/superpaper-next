@@ -13,6 +13,7 @@ from superpaper.data import (
     GeneralSettingsData,
 )
 from superpaper.message_dialog import show_message_dialog
+from superpaper.source_paths import is_valid_source, source_identity
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
 from superpaper.wallpaper_processing import change_wallpaper_job
 
@@ -52,7 +53,9 @@ class BrowsePaths(wx.Dialog):
         sizer_main = wx.BoxSizer(wx.VERTICAL)
         sizer_browse = wx.BoxSizer(wx.VERTICAL)
         self.sizer_paths_list = wx.BoxSizer(wx.VERTICAL)
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_sources = wx.WrapSizer(wx.HORIZONTAL)
+        sizer_preferences = wx.WrapSizer(wx.HORIZONTAL)
+        sizer_actions = wx.BoxSizer(wx.HORIZONTAL)
 
         self.defdir = defdir
         self.dir3 = wx.GenericDirCtrl(
@@ -86,37 +89,45 @@ class BrowsePaths(wx.Dialog):
             sizer_radio.Add(self.radiobox_displays, 0, wx.CENTER | wx.ALL | wx.EXPAND, 5)
 
         # Buttons
-        self.button_add = wx.Button(self, label="Add source")
-        self.button_remove = wx.Button(self, label="Remove source")
+        self.button_add = wx.Button(self, label="Add tree selection")
+        self.button_files = wx.Button(self, label="Add images...")
+        self.button_folder = wx.Button(self, label="Add folder...")
+        self.button_remove = wx.Button(self, label="Remove selected")
         self.button_defdir = wx.Button(self, label="Save as browse start")
         self.button_clrdefdir = wx.Button(self, label="Clear browse start")
         self.button_ok = wx.Button(self, label="Ok")
         self.button_cancel = wx.Button(self, label="Cancel")
 
         self.button_add.Bind(wx.EVT_BUTTON, self.onAdd)
+        self.button_files.Bind(wx.EVT_BUTTON, self.onAddFiles)
+        self.button_folder.Bind(wx.EVT_BUTTON, self.onAddFolder)
         self.button_remove.Bind(wx.EVT_BUTTON, self.onRemove)
         self.button_defdir.Bind(wx.EVT_BUTTON, self.onDefDir)
         self.button_clrdefdir.Bind(wx.EVT_BUTTON, self.onClrDefDir)
         self.button_ok.Bind(wx.EVT_BUTTON, self.onOk)
         self.button_cancel.Bind(wx.EVT_BUTTON, self.onCancel)
 
-        sizer_buttons.Add(self.button_add, 0, wx.CENTER | wx.ALL, 5)
-        sizer_buttons.Add(self.button_remove, 0, wx.CENTER | wx.ALL, 5)
-        sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(self.button_defdir, 0, wx.CENTER | wx.ALL, 5)
-        sizer_buttons.Add(self.button_clrdefdir, 0, wx.CENTER | wx.ALL, 5)
-        sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(self.button_ok, 0, wx.CENTER | wx.ALL, 5)
-        sizer_buttons.Add(self.button_cancel, 0, wx.CENTER | wx.ALL, 5)
+        for button in (self.button_add, self.button_files, self.button_folder, self.button_remove):
+            sizer_sources.Add(button, 0, wx.ALL, 4)
+        sizer_preferences.Add(self.button_defdir, 0, wx.ALL, 4)
+        sizer_preferences.Add(self.button_clrdefdir, 0, wx.ALL, 4)
+        sizer_actions.AddStretchSpacer()
+        sizer_actions.Add(self.button_ok, 0, wx.ALL, 4)
+        sizer_actions.Add(self.button_cancel, 0, wx.ALL, 4)
 
-        sizer_main.Add(sizer_browse, 1, wx.ALL | wx.EXPAND)
-        sizer_main.Add(self.sizer_paths_list, 0, wx.ALL | wx.EXPAND)
+        sizer_main.Add(sizer_browse, 1, wx.EXPAND | wx.ALL, 5)
+        sizer_main.Add(self.sizer_paths_list, 0, wx.EXPAND | wx.ALL, 5)
         if self.use_multi_image:
-            sizer_main.Add(sizer_radio, 0, wx.ALL | wx.EXPAND, 5)
-        sizer_main.Add(sizer_buttons, 0, wx.ALL | wx.EXPAND, 5)
+            sizer_main.Add(sizer_radio, 0, wx.EXPAND | wx.ALL, 5)
+        sizer_main.Add(sizer_sources, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 5)
+        sizer_main.Add(sizer_preferences, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 5)
+        sizer_main.Add(sizer_actions, 0, wx.EXPAND | wx.ALL, 5)
         # self.SetSizer(sizer_main)
-        self.SetSizerAndFit(sizer_main)
-        self.SetSize(wx.Size(-1, 650))
+        self.SetSizer(sizer_main)
+        self.SetMinSize(wx.Size(420, 490))
+        usable = wx.GetClientDisplayRect()
+        self.SetSize(wx.Size(min(680, usable.width), min(700, usable.height)))
+        self.CentreOnParent()
         # self.SetAutoLayout(True)
 
     def create_paths_listctrl(self, use_multi_image):
@@ -139,7 +150,7 @@ class BrowsePaths(wx.Dialog):
                 #  | wx.LC_SINGLE_SEL
             )
             self.paths_listctrl.InsertColumn(0, self.wp_area_name, wx.LIST_FORMAT_RIGHT, width=100)
-            self.paths_listctrl.InsertColumn(1, "Source", width=620)
+            self.paths_listctrl.InsertColumn(1, "Source", width=300)
         else:
             # show simpler listing without header if only one wallpaper target
             self.paths_listctrl = wx.ListCtrl(
@@ -159,12 +170,25 @@ class BrowsePaths(wx.Dialog):
                 #  | wx.LC_HRULES
                 #  | wx.LC_SINGLE_SEL
             )
-            self.paths_listctrl.InsertColumn(0, "Source", width=720)
+            self.paths_listctrl.InsertColumn(0, "Source", width=390)
 
-        # Add the item list to the control
+        # Keep long file paths readable without forcing an oversized dialog.
         self.paths_listctrl.SetImageList(self.il, wx.IMAGE_LIST_SMALL)
+        self.paths_listctrl.SetMinSize(wx.Size(200, 125))
+        self.paths_listctrl.Bind(wx.EVT_SIZE, self.onSourcesResize)
 
         self.sizer_paths_list.Add(self.paths_listctrl, 1, wx.CENTER | wx.ALL | wx.EXPAND, 5)
+
+    def onSourcesResize(self, event):
+        ctrl = event.GetEventObject()
+        available = max(100, ctrl.GetClientSize().width - 16)
+        if ctrl.GetColumnCount() == 2:
+            display_width = min(105, max(45, available // 4))
+            ctrl.SetColumnWidth(0, display_width)
+            ctrl.SetColumnWidth(1, max(60, available - display_width))
+        else:
+            ctrl.SetColumnWidth(0, available)
+        event.Skip()
 
     def append_to_listctrl(self, data_row):
         if self.use_multi_image:
@@ -188,6 +212,8 @@ class BrowsePaths(wx.Dialog):
 
     def create_thumb_bmp(self, filename):
         wximg = wx.Image(filename, type=wx.BITMAP_TYPE_ANY)
+        if not wximg.IsOk() or wximg.GetWidth() <= 0 or wximg.GetHeight() <= 0:
+            return wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE, wx.ART_TOOLBAR, wx.Size(*self.tsize))
         imgsize = wximg.GetSize()
         w2h_ratio = imgsize[0] / imgsize[1]
         if w2h_ratio > 1:
@@ -209,21 +235,59 @@ class BrowsePaths(wx.Dialog):
     # BUTTON methods
     #
 
+    def _add_source(self, path):
+        """Validate and de-duplicate a source within its monitor or group."""
+        if not is_valid_source(path):
+            return False
+        target = str(self.radiobox_displays.GetSelection()) if self.use_multi_image else ""
+        identity = source_identity(path, target)
+        columns = self.paths_listctrl.GetColumnCount()
+        for row in range(self.paths_listctrl.GetItemCount()):
+            existing_target = self.paths_listctrl.GetItemText(row, 0) if columns == 2 else ""
+            existing_path = self.paths_listctrl.GetItemText(row, columns - 1)
+            if source_identity(existing_path, existing_target) == identity:
+                return False
+        self.append_to_listctrl([target, path] if self.use_multi_image else [path])
+        return True
+
     def onAdd(self, event):
-        """Adds selected path to export field."""
-        sel_path = self.dir3.GetPath()
-        # self.dir3.GetPaths(paths) # more efficient but couldn't get to work
-        if self.use_multi_image:
-            # Extra column in advanced mode
-            disp_id = str(self.radiobox_displays.GetSelection())
-            self.append_to_listctrl([disp_id, sel_path])
-        else:
-            self.append_to_listctrl([sel_path])
+        """Add the selected file or folder from the directory tree."""
+        if not self._add_source(self.dir3.GetPath()):
+            wx.Bell()
+
+    def onAddFiles(self, event):
+        """Use the native file chooser for one or more images."""
+        wildcard = "Images (*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.webp)|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.webp"
+        with wx.FileDialog(
+            self,
+            "Choose wallpaper images",
+            defaultDir=self.defdir if os.path.isdir(self.defdir) else "",
+            wildcard=wildcard,
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE,
+        ) as picker:
+            if picker.ShowModal() == wx.ID_OK:
+                for path in picker.GetPaths():
+                    self._add_source(path)
+
+    def onAddFolder(self, event):
+        """Use the native folder chooser for a wallpaper source directory."""
+        with wx.DirDialog(
+            self,
+            "Choose wallpaper folder",
+            defaultPath=self.defdir if os.path.isdir(self.defdir) else "",
+            style=wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST,
+        ) as picker:
+            if picker.ShowModal() == wx.ID_OK:
+                self._add_source(picker.GetPath())
 
     def onRemove(self, event):
-        """Removes last appended path from export field."""
-        item = self.paths_listctrl.GetFocusedItem()
-        if item != -1:
+        """Remove every selected path rather than just the focused item."""
+        selected = []
+        item = self.paths_listctrl.GetFirstSelected()
+        while item != -1:
+            selected.append(item)
+            item = self.paths_listctrl.GetNextSelected(item)
+        for item in reversed(selected):
             self.paths_listctrl.DeleteItem(item)
 
     def onDefDir(self, event):
@@ -257,8 +321,8 @@ class BrowsePaths(wx.Dialog):
         self.EndModal(wx.ID_OK)
 
     def onCancel(self, event):
-        """Closes path picker, throwing away selections."""
-        self.Destroy()
+        """End modal interaction without adding any sources."""
+        self.EndModal(wx.ID_CANCEL)
 
 
 class DisplayPositionEntry(wx.Frame):
