@@ -48,6 +48,9 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check --output-format=github
 
+      - name: Show Ruff formatting changes
+        run: uv run ruff format --diff tests/test_kde_wallpaper_dispatch.py
+
       - name: Ruff format check
         run: uv run ruff format --check
 
