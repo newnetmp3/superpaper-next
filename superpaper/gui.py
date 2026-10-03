@@ -32,6 +32,7 @@ from superpaper.data import (
     save_managed_profile,
 )
 from superpaper.message_dialog import show_message_dialog
+from superpaper.preview_geometry import fit_preview_canvas, has_positive_area, usable_preview_area
 from superpaper.profile_id import ProfileId, ProfileIdError
 from superpaper.source_paths import source_identity
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
@@ -411,11 +412,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         adjustments (manual offsets, span groups, perspective selection).
         """
         self.sizer_setting_adv = wx.StaticBoxSizer(wx.VERTICAL, self, "Advanced wallpaper adjustment")
+        advanced_parent = self.sizer_setting_adv.GetStaticBox()
         help_bmp = wx.ArtProvider.GetBitmap(wx.ART_QUESTION, wx.ART_BUTTON, wx.Size(20, 20))
 
         # Offsets
         self.sizer_setting_offsets = wx.BoxSizer(wx.VERTICAL)
-        statbox_parent_offsets = self
+        statbox_parent_offsets = advanced_parent
         self.cb_offsets = wx.CheckBox(statbox_parent_offsets, -1, "Apply manual offsets")
         self.cb_offsets.Bind(wx.EVT_CHECKBOX, self.onCheckboxOffsets)
         st_offsets = wx.StaticText(statbox_parent_offsets, -1, "Manual offsets in pixels (x,y=px,px):")
@@ -438,17 +440,17 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         # Span groups
         self.sizer_setting_spangroups = wx.BoxSizer(wx.VERTICAL)
         sizer_spangroups_cb = wx.BoxSizer(wx.HORIZONTAL)
-        self.cb_spangroups = wx.CheckBox(self, -1, "Use multiple span areas")
+        self.cb_spangroups = wx.CheckBox(advanced_parent, -1, "Use multiple span areas")
         self.cb_spangroups.Bind(wx.EVT_CHECKBOX, self.onCheckboxSpanGroups)
-        self.button_help_spang = wx.BitmapButton(self, bitmap=wx.BitmapBundle(help_bmp), name="butt_help_spang")
+        self.button_help_spang = wx.BitmapButton(advanced_parent, bitmap=wx.BitmapBundle(help_bmp), name="butt_help_spang")
         self.button_help_spang.Bind(wx.EVT_BUTTON, self.onHelpSpanGroups)
         sizer_spangroups_cb.Add(self.cb_spangroups, 0, wx.ALIGN_LEFT | wx.LEFT, 5)
         sizer_spangroups_cb.AddStretchSpacer()
         sizer_spangroups_cb.Add(self.button_help_spang, 0, wx.RIGHT, 5)
         sizer_spangroups_data = wx.WrapSizer(wx.HORIZONTAL)
-        self.ch_list_spangroups = self.list_of_wxchoice(self, wpproc.NUM_DISPLAYS, 0.4)
+        self.ch_list_spangroups = self.list_of_wxchoice(advanced_parent, wpproc.NUM_DISPLAYS, 0.4)
         for ch in self.ch_list_spangroups:
-            st = wx.StaticText(self, -1, str(self.ch_list_spangroups.index(ch)) + ":")
+            st = wx.StaticText(advanced_parent, -1, str(self.ch_list_spangroups.index(ch)) + ":")
             ch_st_sizer = wx.BoxSizer(wx.HORIZONTAL)
             ch_st_sizer.Add(st, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT | wx.TOP | wx.BOTTOM, 5)
             ch_st_sizer.Add(ch, 0, wx.ALIGN_LEFT | wx.ALL, 5)
@@ -462,10 +464,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
         # Perspective profile
         self.sizer_setting_persp = wx.BoxSizer(wx.HORIZONTAL)
-        st_perspprof = wx.StaticText(self, -1, "Perspective profile:")
+        st_perspprof = wx.StaticText(advanced_parent, -1, "Perspective profile:")
         persp_choices = ["default", *list(self.display_sys.perspective_dict.keys()), "disabled"]
         self.ch_persp = wx.ComboBox(
-            self,
+            advanced_parent,
             -1,
             name="PerspChoice",
             size=wx.Size(165, -1),
@@ -1074,12 +1076,14 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self._update_dirty_state()
 
     def onResize(self, event):
+        # wx sends intermediate 0-height sizes while the scrolled window lays
+        # out its children. Defer bitmap work until the preview has real space.
         self.resized = True
-        self.wpprev_pnl.refresh_preview()
+        event.Skip()
 
     def onIdle(self, event):
         leftdown = wx.GetMouseState().LeftIsDown()
-        update = bool(self.resized and not leftdown)
+        update = bool(self.resized and not leftdown and self.wpprev_pnl.preview_area_ready())
         if update:
             self.wpprev_pnl.full_refresh_preview(
                 update,
@@ -1088,8 +1092,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 spangroups=self.read_spangroups(True),
             )
             self.resized = False
-        else:
-            event.Skip()
+        event.Skip()
 
     def onSpanRadio(self, event):
         old_adv_set = self.show_advanced_settings
@@ -1939,6 +1942,10 @@ class WallpaperPreviewPanel(wx.Panel):
         self.positions_dragged = False
         self.Bind(wx.EVT_PAINT, self.OnPaint)
 
+    def preview_area_ready(self):
+        """Only create preview bitmaps after wx has a usable panel size."""
+        return usable_preview_area(self.GetClientSize())
+
     #
     # UI drawing methods
     #
@@ -2042,6 +2049,8 @@ class WallpaperPreviewPanel(wx.Panel):
             st_bmp.SetBitmap(bmp)
 
     def refresh_preview(self, use_ppi_px=False, force_refresh=False):
+        if not self.preview_area_ready():
+            return
         if force_refresh or (not self.config_mode or not self.bezel_conifg_mode):
             self.dtop_canvas_px = self.get_canvas(self.display_data, use_ppi_px)
             self.dtop_canvas_relsz, self.dtop_canvas_pos, scaling_fac = self.fit_canvas_wrkarea(self.dtop_canvas_px)
@@ -2068,6 +2077,8 @@ class WallpaperPreviewPanel(wx.Panel):
 
     def full_refresh_preview(self, is_resized, use_ppi_px, use_multi_image, spangroups=None):
         self.use_multi_image = use_multi_image
+        if not self.preview_area_ready():
+            return
         if is_resized and not self.config_mode:
             dtop_canvas_relsz, dtop_canvas_pos, scaling_fac = self.fit_canvas_wrkarea(self.dtop_canvas_px)
             # if (self.current_preview_images and dtop_canvas_relsz is not self.dtop_canvas_relsz):
@@ -2096,8 +2107,15 @@ class WallpaperPreviewPanel(wx.Panel):
         self._last_use_ppi = use_ppi_px
         self._last_use_multi = use_multi_image
         self._last_spangroups = spangroups
+        self.current_preview_images = list(image_list or ())
+        if not self.preview_area_ready():
+            return
         self.refresh_preview(use_ppi_px)
-        self.current_preview_images = image_list
+        image_list = self.current_preview_images
+        if not image_list:
+            self.resize_displays(use_ppi_px)
+            self.Refresh()
+            return
 
         def safe_sub_bitmap(bm, rect):
             if rect.GetBottom() >= bm.GetHeight():
@@ -2221,7 +2239,7 @@ class WallpaperPreviewPanel(wx.Panel):
         """Add bezel rectangles ( right_bez , bottom_bez ) to given bitmap."""
         # sp_logging.G_LOGGER.info("bezels_to_bitmap: bez_rects: %s", bez_rects)
         right_bez, bottom_bez = bez_rects
-        if right_bez == (0, 0) and bottom_bez == (0, 0):
+        if not has_positive_area(right_bez) and not has_positive_area(bottom_bez):
             return bmp
         # bmp into wx.Image and new output
         img = bmp.ConvertToImage()
@@ -2229,15 +2247,16 @@ class WallpaperPreviewPanel(wx.Panel):
         img_out = wx.Image(disp_sz[0], disp_sz[1])
         img_out.Paste(img, 0, 0)
 
-        # Add bezels sequentially to the Image
-        # bottom bez
-        if bottom_bez != (0, 0):
+        # Subpixel bezels can round to (0, N) or (N, 0). wx cannot
+        # construct bitmaps with either dimension equal to zero.
+        # Add bezels sequentially to the Image.
+        if has_positive_area(bottom_bez):
             b_bez_bmp = wx.Bitmap.FromRGBA(bottom_bez[0], bottom_bez[1], red=5, green=5, blue=5, alpha=100)
             b_bez_img = b_bez_bmp.ConvertToImage()
             img_out.Paste(b_bez_img, 0, img_sz[1])
 
         # right bez: is longer if bottom bez is present
-        if right_bez != (0, 0):
+        if has_positive_area(right_bez):
             r_bez_bmp = wx.Bitmap.FromRGBA(right_bez[0], right_bez[1], red=5, green=5, blue=5, alpha=100)
             r_bez_img = r_bez_bmp.ConvertToImage()
             img_out.Paste(r_bez_img, img_sz[0], 0)
@@ -2268,36 +2287,18 @@ class WallpaperPreviewPanel(wx.Panel):
         return (rightmost_edge, bottommost_edge)
 
     def fit_canvas_wrkarea(self, canvas_px):
-        """Compute canvas size relative to the background panel size.
+        """Fit the desktop canvas into the usable preview panel area.
 
-        Returns a size tuple in so that along the longer
-        edge of the canvas, at most 90% of the panel dimensions are used.
-
-        Input is either canvas size in true pixels or in PPI normalized
-        pixels."""
-        rel_factor = 0.9
-        rel_achor_gap = (1 - rel_factor) / 2
-        work_sz = self.GetSize()
-        w2h_ratio_worksz = work_sz[0] / work_sz[1]
-        w2h_ratio = canvas_px[0] / canvas_px[1]
-        if w2h_ratio > w2h_ratio_worksz:
-            # canvas is wider than working area
-            # limit width to 90% of working area
-            new_width = rel_factor * work_sz[0]
-            scaling_fac = new_width / canvas_px[0]
-            new_height = scaling_fac * canvas_px[1]
-            anchor_left = rel_achor_gap * work_sz[0]
-            anchor_top = (work_sz[1] - new_height) / 2
+        wx can report transient zero-sized windows during layout and when
+        minimized. Retain the last usable size instead of dividing by zero
+        or allocating zero-width/height preview bitmaps.
+        """
+        work_sz = self.GetClientSize()
+        if usable_preview_area(work_sz):
+            self._last_valid_work_size = (work_sz[0], work_sz[1])
         else:
-            # canvas is taller than working area
-            new_height = rel_factor * work_sz[1]
-            scaling_fac = new_height / canvas_px[1]
-            new_width = scaling_fac * canvas_px[0]
-            anchor_left = (work_sz[0] - new_width) / 2
-            anchor_top = rel_achor_gap * work_sz[1]
-        canvas_rel = (round(new_width), round(new_height))
-        canvas_rel_pos = (round(anchor_left), round(anchor_top))
-        return (canvas_rel, canvas_rel_pos, scaling_fac)
+            work_sz = getattr(self, "_last_valid_work_size", self.preview_size)
+        return fit_preview_canvas(canvas_px, work_sz)
 
     def displays_on_canvas(self, disp_data, canvas_pos, scaling_fac, use_ppi_px=False):
         """Return sizes and positions of displays in disp_data on the working area.
@@ -2319,8 +2320,8 @@ class WallpaperPreviewPanel(wx.Panel):
                     (
                         # tuple 1: size = res + bez
                         (
-                            round(scaling_fac * (res[0] + bez[0])),
-                            round(scaling_fac * (res[1] + bez[1])),
+                            max(1, round(scaling_fac * (res[0] + bez[0]))),
+                            max(1, round(scaling_fac * (res[1] + bez[1]))),
                         ),
                         # tuple 2: pos
                         (
@@ -2329,7 +2330,7 @@ class WallpaperPreviewPanel(wx.Panel):
                         ),
                     )
                 )
-                image_szs.append((round(scaling_fac * res[0]), round(scaling_fac * res[1])))
+                image_szs.append((max(1, round(scaling_fac * res[0])), max(1, round(scaling_fac * res[1]))))
                 if bez[0] != 0:
                     right_bez = (
                         round(scaling_fac * bez[0]),
@@ -2350,7 +2351,7 @@ class WallpaperPreviewPanel(wx.Panel):
                 off = canvas_pos
                 display_szs_pos.append(
                     (
-                        tuple([round(px * scaling_fac) for px in disp.resolution]),
+                        tuple(max(1, round(px * scaling_fac)) for px in disp.resolution),
                         (
                             round(doff[0] * scaling_fac) + off[0],
                             round(doff[1] * scaling_fac) + off[1],
