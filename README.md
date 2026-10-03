@@ -31,7 +31,7 @@ This fork focuses on KDE Plasma 6 support and improving the wallpaper selection 
 
 ### Optional cloud AI image upscaling
 
-Under **Image scaling & position**, enable **Cloud AI upscale low-resolution images**
+Under **Image scaling & position**, enable **Cloud AI upscale (uploads images)**
 for a profile that needs higher-quality wallpaper output. This is **off by default**
 because it sends your source wallpaper image to a public third-party
 [Hugging Face Space](https://huggingface.co/spaces/Nick088/Real-ESRGAN_Pytorch).

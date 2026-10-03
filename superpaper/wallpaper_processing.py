@@ -1186,7 +1186,12 @@ def span_single_image_simple(profile, force):
         return
     canvas_tuple = tuple(compute_canvas(RESOLUTION_ARRAY, DISPLAY_OFFSET_ARRAY))
     img = prepare_cloud_upscaled_image(
-        img, file, canvas_tuple, zoom=profile.zoom, enabled=getattr(profile, "cloud_upscale", False), cache_root=TEMP_PATH
+        img,
+        file,
+        canvas_tuple,
+        zoom=profile.zoom,
+        enabled=getattr(profile, "cloud_upscale", False),
+        cache_root=TEMP_PATH,
     )
     img_resize = resize_to_fill(img, canvas_tuple, zoom=profile.zoom, offset=profile.offsets)
 
