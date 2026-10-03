@@ -9,7 +9,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, 'fix/**']
   pull_request:
 
 # Least-privilege: the lint job only needs to read the repo.
