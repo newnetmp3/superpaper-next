@@ -88,9 +88,7 @@ def test_preview_uses_original_orientation_without_cloud_api_calls():
     tree = ast.parse(source.read_text(encoding="utf-8"))
     panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
     # The first two declarations are @overload stubs; inspect the body.
-    render = [
-        node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap"
-    ][-1]
+    render = [node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap"][-1]
     text = ast.unparse(render)
     assert "ImageOps.exif_transpose(source)" in text
     assert "prepare_cloud_upscaled_image" not in text
