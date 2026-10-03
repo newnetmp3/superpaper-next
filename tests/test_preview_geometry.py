@@ -99,14 +99,10 @@ def test_settings_panel_does_not_scroll_due_to_focus_or_mouse_exit():
     """Guard the wx.ScrolledWindow overrides without importing wx in CI."""
     source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
-    panel = next(
-        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperSettingsPanel"
-    )
+    panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperSettingsPanel")
 
     for method_name in ("ShouldScrollToChildOnFocus", "SendAutoScrollEvents"):
-        method = next(
-            node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == method_name
-        )
+        method = next(node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == method_name)
         result = method.body[-1]
         assert isinstance(result, ast.Return)
         assert isinstance(result.value, ast.Constant)
