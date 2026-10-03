@@ -29,6 +29,29 @@ This fork focuses on KDE Plasma 6 support and improving the wallpaper selection 
 - **Horizontal / vertical positioning**: move the visible area within the image to place the content where you want it, with a live preview
 - Saved per profile. These controls apply to a single fixed image, so they are reset and disabled while a profile's slideshow is enabled.
 
+### Optional cloud AI image upscaling
+
+Under **Image scaling & position**, enable **Cloud AI upscale (uploads images)**
+for a profile that needs higher-quality wallpaper output. This is **off by default**
+because it sends your source wallpaper image to a public third-party
+[Hugging Face Space](https://huggingface.co/spaces/Nick088/Real-ESRGAN_Pytorch).
+You do not need a local AI model, GPU, or paid account.
+
+Install the small API client once using `uv pip install gradio_client`, or install
+Superpaper with `pip install -e '.[upscale-cloud]'`. No model weights are downloaded.
+Images are processed only when the render needs a larger source and successful
+AI results are cached locally; repeated wallpaper changes reuse the cache.
+Hugging Face public GPU capacity is limited and can be unavailable, so processing
+can be delayed or refused. When this happens, Superpaper uses local Lanczos
+resampling rather than failing to set the wallpaper. The original input files
+are never modified. Very large files are not uploaded. Enabling cloud upscaling
+may add latency to **Apply**, and slideshow profiles can consume the free quota.
+
+This is optional, not a privacy-preserving upload: your image leaves your
+machine. A public community Space is not a service with guaranteed uptime,
+confidentiality, or long-term API compatibility. Avoid enabling it for private
+or sensitive pictures. Already-cached outputs may be used while offline.
+
 ### Native Wayland System Tray
 - **Interactive tray on Wayland**: a native `StatusNotifierItem` tray icon replaces the legacy X11 tray, which appeared but was completely unclickable on modern Wayland desktops (notably KDE Plasma 6).
 - **Full tray controls**: left-click opens the wallpaper settings, middle-click advances the wallpaper, and right-click shows the full menu with your profiles grouped under a **Profiles** submenu.

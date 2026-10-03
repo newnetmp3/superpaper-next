@@ -466,6 +466,7 @@ def _validate_profile_syntax(text: str) -> None:
             "selected",
             "zoom",
             "align",
+            "cloud_upscale",
         } or key.startswith("display"):
             if not separator:
                 message = f"Missing '=' after profile setting '{key}'."
@@ -962,6 +963,7 @@ class ProfileData:
         self.perspective = "default"
         self.zoom = 1.0
         self.offsets = (0.0, 0.0)
+        self.cloud_upscale = False
         self.paths_array = []
         self.selected = None
 
@@ -1089,6 +1091,8 @@ class ProfileData:
                         self.perspective = words[1].strip()
                         # if sp_logging.DEBUG:
                         #     sp_logging.G_LOGGER.info("perspective preset: %s", self.perspective)
+                    elif words[0] == "cloud_upscale":
+                        self.cloud_upscale = words[1].strip().lower() == "true"
                     elif words[0] == "zoom":
                         try:
                             self.zoom = max(1.0, float(words[1].strip()))
@@ -1500,6 +1504,7 @@ class CLIProfileData(ProfileData):
         self.perspective = perspective
         self.zoom = 1.0
         self.offsets = (0.0, 0.0)
+        self.cloud_upscale = False
         self.manual_offsets = wpproc.NUM_DISPLAYS * [(0, 0)]
 
         if len(files) == 1 and not advanced:
@@ -1549,6 +1554,7 @@ class TempProfileData:
         self.perspective: str | None = None
         self.zoom: float | None = None
         self.align: tuple | None = None
+        self.cloud_upscale: bool = False
         self.selected: list | None = None
         self.paths_array = []
 
@@ -1612,6 +1618,8 @@ class TempProfileData:
             lines.append("hotkey=" + str(self.hk_binding))
         if self.perspective:
             lines.append("perspective=" + str(self.perspective))
+        if self.cloud_upscale:
+            lines.append("cloud_upscale=true")
         if self.zoom is not None and self.zoom != 1.0:
             lines.append("zoom=" + str(self.zoom))
         if self.align is not None and tuple(self.align) != (0.0, 0.0):

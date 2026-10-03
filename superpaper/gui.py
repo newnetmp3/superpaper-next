@@ -342,6 +342,15 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         zoom_grid.Add(self.st_offy_val, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
         self.sizer_setting_zoom.Add(zoom_grid, 0, wx.EXPAND | wx.ALL, 5)
 
+        self.cb_cloud_upscale = wx.CheckBox(statbox_parent_zoom, -1, "Cloud AI upscale (uploads images)")
+        self.cb_cloud_upscale.SetToolTip(
+            "When enabled, small wallpaper images are uploaded to a third-party Hugging Face "
+            "Real-ESRGAN Space. Uses free limited GPU time; no AI model is installed locally. "
+            "Results are cached. Offline/quota failures use local resizing instead."
+        )
+        self.cb_cloud_upscale.Bind(wx.EVT_CHECKBOX, self._on_cloud_upscale_changed)
+        self.sizer_setting_zoom.Add(self.cb_cloud_upscale, 0, wx.ALL, 5)
+
         # Small undo button to reset scaling & position to defaults without
         # touching the rest of the profile configuration.
         undo_bmp = wx.ArtProvider.GetBitmap(wx.ART_UNDO, wx.ART_BUTTON, wx.Size(16, 16))
@@ -730,6 +739,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.st_offy_val.SetLabel(str(offy_pct))
         self.wpprev_pnl.zoom = profile.zoom
         self.wpprev_pnl.offset = profile.offsets
+        self.cb_cloud_upscale.SetValue(getattr(profile, "cloud_upscale", False))
 
         # Update wallpaper preview from selected profile
         if self.show_advanced_settings:
@@ -1110,6 +1120,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.sld_offx.SetValue(x)
             self.sld_offy.SetValue(y)
             self.onZoomOffsetChange(None)
+
+    def _on_cloud_upscale_changed(self, event):
+        """Record consent; actual network requests run on the render worker."""
+        self._update_dirty_state()
 
     def onZoomOffsetChange(self, event):
         """Live-update the preview as zoom/position sliders move."""
@@ -1534,6 +1548,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         """
         tmp_profile = TempProfileData()
         tmp_profile.name = self.tc_name.GetLineText(0)
+        tmp_profile.cloud_upscale = self.cb_cloud_upscale.GetValue()
         tmp_profile.slideshow = self.cb_slideshow.GetValue()
         if tmp_profile.slideshow:
             delay_text = self.tc_sshow_delay.GetLineText(0)

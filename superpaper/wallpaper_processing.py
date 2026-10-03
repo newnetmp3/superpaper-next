@@ -25,6 +25,7 @@ from screeninfo import get_monitors
 
 import superpaper.perspective as persp
 import superpaper.sp_logging as sp_logging
+from superpaper.cloud_upscale import prepare_cloud_upscaled_image
 from superpaper.message_dialog import show_message_dialog
 from superpaper.sp_paths import CONFIG_PATH, TEMP_PATH
 from superpaper.sp_platform import IS_LINUX, IS_MACOS, IS_WINDOWS, host_spawn_env
@@ -1184,6 +1185,14 @@ def span_single_image_simple(profile, force):
         )
         return
     canvas_tuple = tuple(compute_canvas(RESOLUTION_ARRAY, DISPLAY_OFFSET_ARRAY))
+    img = prepare_cloud_upscaled_image(
+        img,
+        file,
+        canvas_tuple,
+        zoom=profile.zoom,
+        enabled=getattr(profile, "cloud_upscale", False),
+        cache_root=TEMP_PATH,
+    )
     img_resize = resize_to_fill(img, canvas_tuple, zoom=profile.zoom, offset=profile.offsets)
 
     outputfile, outputfile_old = alternating_outputfile(profile.name)
@@ -1279,8 +1288,8 @@ def span_single_image_advanced(profile, force):
     grp_bezels = [[bezels_px[index] for index in grp] for grp in spangroups]
     grp_persp_dat = group_persp_data(persp_dat, spangroups)
 
-    for img, grp, grp_p_dat, grp_crops, grp_res_arr, grp_bez in zip(
-        img_list, spangroups, grp_persp_dat, grp_crop_tuples, grp_res_array, grp_bezels
+    for img, source_file, grp, grp_p_dat, grp_crops, grp_res_arr, grp_bez in zip(
+        img_list, files, spangroups, grp_persp_dat, grp_crop_tuples, grp_res_array, grp_bezels
     ):
         if persp_dat:
             proj_plane_crops, persp_coeffs = persp.get_backprojected_display_system(grp_crops, grp_p_dat)
@@ -1289,7 +1298,15 @@ def span_single_image_advanced(profile, force):
             # Canvas containing ppi normalized displays
             canvas_tuple_trgt = tuple(compute_working_canvas(grp_crops))
             sp_logging.G_LOGGER.info("Back-projected canvas size: %s", canvas_tuple_proj)
-            img_workingsize = resize_to_fill(img, canvas_tuple_proj, zoom=profile.zoom, offset=profile.offsets)
+            upscaled = prepare_cloud_upscaled_image(
+                img,
+                source_file,
+                canvas_tuple_proj,
+                zoom=profile.zoom,
+                enabled=getattr(profile, "cloud_upscale", False),
+                cache_root=TEMP_PATH,
+            )
+            img_workingsize = resize_to_fill(upscaled, canvas_tuple_proj, zoom=profile.zoom, offset=profile.offsets)
             for _crop_tup, coeffs, ppin_crop, (i_res, res) in zip(
                 proj_plane_crops, persp_coeffs, grp_crops, enumerate(grp_res_arr)
             ):
@@ -1317,7 +1334,15 @@ def span_single_image_advanced(profile, force):
             # Image is now the height of the eff tallest display + possible manual
             # offsets and the width of the combined eff widths + possible manual
             # offsets.
-            img_workingsize = resize_to_fill(img, canvas_tuple_eff, zoom=profile.zoom, offset=profile.offsets)
+            upscaled = prepare_cloud_upscaled_image(
+                img,
+                source_file,
+                canvas_tuple_eff,
+                zoom=profile.zoom,
+                enabled=getattr(profile, "cloud_upscale", False),
+                cache_root=TEMP_PATH,
+            )
+            img_workingsize = resize_to_fill(upscaled, canvas_tuple_eff, zoom=profile.zoom, offset=profile.offsets)
             # Simultaneously make crops at working size and then resize down to actual
             # resolution from RESOLUTION_ARRAY as needed.
             for crop_tup, (i_res, res) in zip(grp_crops, enumerate(grp_res_arr)):
@@ -1378,7 +1403,15 @@ def set_multi_image_wallpaper(profile, force):
                 file,
             )
             return
-        img_resized.append(resize_to_fill(image, res, zoom=profile.zoom, offset=profile.offsets))
+        upscaled = prepare_cloud_upscaled_image(
+            image,
+            file,
+            res,
+            zoom=profile.zoom,
+            enabled=getattr(profile, "cloud_upscale", False),
+            cache_root=TEMP_PATH,
+        )
+        img_resized.append(resize_to_fill(upscaled, res, zoom=profile.zoom, offset=profile.offsets))
     canvas_tuple = tuple(compute_canvas(RESOLUTION_ARRAY, DISPLAY_OFFSET_ARRAY))
     combined_image = Image.new("RGB", canvas_tuple, color=0)
     combined_image.load()
