@@ -49,9 +49,7 @@ def test_enhanced_wallpaper_keeps_original_feature_positions(profile_modules, zo
     enhanced = original.resize((640, 400), Image.Resampling.NEAREST)
     target = (200, 110)
     raw = wpproc.resize_to_fill(original, target, zoom=zoom, offset=offset)
-    applied = wpproc.resize_to_fill(
-        enhanced, target, zoom=zoom, offset=offset, reference_size=original.size
-    )
+    applied = wpproc.resize_to_fill(enhanced, target, zoom=zoom, offset=offset, reference_size=original.size)
     # Normalized placement should agree within the filtering/rounding error.
     for y in (12, 35, 60, 95):
         for x in (13, 50, 100, 175):
