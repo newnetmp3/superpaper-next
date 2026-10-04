@@ -85,3 +85,32 @@ def original_frame_box(source_size, target_size, zoom, offset):
     left = (source_w - crop_width) * (1 + offset_x) / 2
     top = (source_h - crop_height) * (1 + offset_y) / 2
     return left, top, left + crop_width, top + crop_height
+
+
+def desktop_preview_layout(displays, work_size):
+    """Fit the real virtual desktop (not PPI physical layout) in the preview.
+
+    Each entry is (resolution, digital_offset). Return the scaled canvas and
+    monitor boxes in panel coordinates, preserving per-monitor virtual positions
+    and the gaps of an offset or mixed-resolution desktop. The wallpaper
+    compositor uses these same digital offsets when combining monitor images.
+    """
+    if not displays or not has_positive_area(work_size):
+        raise PreviewGeometryError
+    if any(not has_positive_area(res) for res, _offset in displays):
+        raise PreviewGeometryError
+    left = min(offset[0] for _res, offset in displays)
+    top = min(offset[1] for _res, offset in displays)
+    right = max(offset[0] + res[0] for res, offset in displays)
+    bottom = max(offset[1] + res[1] for res, offset in displays)
+    canvas_size, canvas_pos, factor = fit_preview_canvas((right - left, bottom - top), work_size)
+    rectangles = [
+        (
+            canvas_pos[0] + round((offset[0] - left) * factor),
+            canvas_pos[1] + round((offset[1] - top) * factor),
+            max(1, round(res[0] * factor)),
+            max(1, round(res[1] * factor)),
+        )
+        for res, offset in displays
+    ]
+    return canvas_size, canvas_pos, rectangles
