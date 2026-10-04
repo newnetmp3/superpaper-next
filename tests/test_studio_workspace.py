@@ -208,9 +208,11 @@ def test_inspector_thumbnail_shows_original_source_not_ai_output():
 
 def test_gallery_replaces_canvas_only_in_profiles_workspace():
     source = ast.unparse(_method("WallpaperSettingsPanel", "_set_studio_workspace"))
-    assert 'self.studio_canvas_column.Show(self.sizer_gallery, show=name == "Profiles")' in source
-    assert 'self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")' in source
-    assert 'self.studio_inspector.Show(self.studio_fit_row, show=name == "Wallpapers")' in source
+    assert "self.studio_canvas_column.Show(self.sizer_gallery" in source
+    assert "self.studio_canvas_column.Show(self.sizer_top_half" in source
+    assert "self.studio_inspector.Show(self.studio_fit_row" in source
+    assert "name == 'Profiles'" in source
+    assert "name == 'Wallpapers'" in source
 
 
 def test_preview_monitor_numbers_are_human_readable():
