@@ -76,8 +76,8 @@ def test_compare_slider_changes_original_vs_adjusted_boundary():
     assert "if self.compare_original:" in panel
     assert "split_local_preview(" in panel
     feedback = _method("WallpaperSettingsPanel", "_studio_update_compare_feedback")
-    assert "No local edits (both sides match)" in feedback
-    assert "self.studio_compare_state.Show(enabled)" in feedback
+    assert "No local edits" in feedback
+    assert "self.studio_compare_row.Show(self.studio_compare_state, show=enabled)" in feedback
     sharpen = _method("WallpaperSettingsPanel", "_on_cloud_quality_changed")
     tone = _method("WallpaperSettingsPanel", "_on_studio_tone_changed")
     assert "self._studio_update_compare_feedback()" in sharpen
@@ -215,3 +215,35 @@ def test_shader_dropdown_starts_with_modes_and_hides_individual_hooks():
     assert "self._refresh_local_shader_options(selected)" in toggle
     # Toggling advanced view must not count as editing the selected preset.
     assert "self._update_dirty_state()" not in toggle
+
+
+def test_cloud_checkbox_cannot_push_reset_view_into_processing_inspector():
+    navigation = _method("WallpaperSettingsPanel", "create_studio_navigation")
+    assert "self.studio_preview_tools = wx.BoxSizer(wx.VERTICAL)" in navigation
+    assert "self.studio_compare_row = wx.BoxSizer(wx.HORIZONTAL)" in navigation
+    assert "self.studio_view_row = wx.BoxSizer(wx.HORIZONTAL)" in navigation
+    assert "self.studio_compare_row.Add(self.studio_compare" in navigation
+    assert "self.studio_compare_row.Add(self.studio_split_slider" in navigation
+    assert "self.studio_compare_row.Add(self.studio_compare_state" in navigation
+    assert "self.studio_view_row.Add(self.studio_desktop_layout" in navigation
+    assert "self.studio_view_row.Add(self.studio_monitor_choice" in navigation
+    assert "self.studio_view_row.Add(self.studio_reset_view" in navigation
+    assert "self.studio_preview_tools.Add(self.studio_compare_row" in navigation
+    assert "self.studio_preview_tools.Add(self.studio_view_row" in navigation
+
+    cloud = _method("WallpaperSettingsPanel", "_on_cloud_upscale_changed")
+    assert "self._sync_cloud_quality_controls()" in cloud
+    assert "self.studio_reset_view" not in cloud
+    assert "self.studio_preview_tools" not in cloud
+
+    switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
+    assert "self.studio_canvas_column.Show(self.studio_preview_tools, show=name != 'Profiles', recursive=True)" in switching
+    assert "self.studio_compare_row.Show(self.studio_compare_state, show=self.studio_compare.GetValue())" in switching
+
+
+def test_comparison_feedback_remains_compact_when_cloud_is_toggled():
+    feedback = _method("WallpaperSettingsPanel", "_studio_update_compare_feedback")
+    assert "Local edits active" in feedback
+    assert "No local edits" in feedback
+    assert "No local edits (both sides match)" not in feedback
+    assert "self.studio_canvas_column.Layout()" in feedback
