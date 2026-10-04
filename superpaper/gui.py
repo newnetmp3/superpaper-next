@@ -706,7 +706,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.button_browse = wx.Button(self.statbox_parent_paths, label="Add images...")
         self.button_browse_folders = wx.Button(self.statbox_parent_paths, label="Add folder...")
         self.button_remove_source = wx.Button(self.statbox_parent_paths, label="Remove selected")
-        self.button_browse.Bind(wx.EVT_BUTTON, self.onBrowsePaths)
+        self.button_browse.Bind(wx.EVT_BUTTON, self.onAddImagesSource)
         self.button_browse_folders.Bind(wx.EVT_BUTTON, self.onAddFolderSource)
         self.button_remove_source.Bind(wx.EVT_BUTTON, self.onRemoveSource)
         # Wheel input over the entire source group belongs to the outer window,
@@ -2585,7 +2585,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self._preview_source_path(path)
         self._update_dirty_state()
 
-    def onBrowsePaths(self, event):
+    def onAddImagesSource(self, event):
         """Add source images using the desktop file chooser, never a tree dialog."""
         paths = self._choose_native_sources(multiple=True, title="Add wallpaper images")
         if not paths:
