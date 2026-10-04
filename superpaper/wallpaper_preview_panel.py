@@ -5,17 +5,15 @@ desktop wallpaper application stay in gui.py and wallpaper_processing.py.
 """
 
 import os
-import time
 from typing import Literal, overload
 
-from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
+from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 
 import superpaper.sp_logging as sp_logging
 from superpaper.cloud_upscale import locally_sharpen
 from superpaper.configuration_dialogs import DisplayPositionEntry, HelpPopup
 from superpaper.image_adjustments import apply_local_adjustments, split_local_preview
-from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import (
     comparison_drag_fraction,
     comparison_hit_region,
