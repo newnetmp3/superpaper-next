@@ -44,7 +44,6 @@ _PRESET_STAGES = {
 _VARIANT_ORDER = ("M", "S", "L", "VL", "UL")
 
 
-
 class ShaderImportError(ValueError):
     """A shader archive is malformed, unsafe, or contains no supported files."""
 
@@ -124,9 +123,7 @@ def available_shaders(*, shader_root=None):
     """Selectable MPV-style ordered modes and usable individual effects."""
     hooks = _installed_hooks(shader_root=shader_root)
     choices = [name for name in hooks if "AutoDownscalePre" not in name]
-    choices.extend(
-        name for name in _PRESET_STAGES if resolve_shader_chain(name, shader_root=shader_root)
-    )
+    choices.extend(name for name in _PRESET_STAGES if resolve_shader_chain(name, shader_root=shader_root))
     return sorted(choices)
 
 
