@@ -1,8 +1,8 @@
 """Application-wide wx settings window and its panel."""
 
-from superpaper.data import GeneralSettingsData
-
 import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
+
+from superpaper.data import GeneralSettingsData
 
 
 class SettingsFrame(wx.Frame):
