@@ -40,7 +40,8 @@ def resolved_wallpaper_selections(source_groups, previous_selected, replacements
     previous = previous_selected or []
     target_ids = [str(index) for index in range(len(source_groups))] if targets is None else list(targets)
     if len(target_ids) != len(source_groups):
-        raise ValueError("Source groups and target IDs must have matching lengths")
+        message = "Source groups and target IDs must have matching lengths"
+        raise ValueError(message)
     for index, paths in enumerate(source_groups):
         choice = replacements.get(target_ids[index])
         if choice is None and len(source_groups) == 1:
