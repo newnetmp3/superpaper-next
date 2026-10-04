@@ -1350,7 +1350,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         if choice != wx.NOT_FOUND:
             self.choice_profiles.SetSelection(choice)
         self.populate_fields(profile)
-        self._refresh_profile_gallery()
+        # Defer rebuilding cards until the click handler returns; deleting the
+        # clicked wx window from its own event handler is unsafe on GTK.
+        wx.CallAfter(self._refresh_profile_gallery)
         self.studio_status.SetLabel(f"Selected profile: {name}")
 
     def _on_gallery_selected(self, event):
