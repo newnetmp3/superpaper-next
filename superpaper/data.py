@@ -25,6 +25,7 @@ from pathlib import Path
 import superpaper.sp_logging as sp_logging
 import superpaper.sp_paths as sp_paths
 import superpaper.wallpaper_processing as wpproc
+from superpaper.cloud_upscale import normalize_scale_mode, normalize_sharpen
 from superpaper.message_dialog import show_message_dialog
 from superpaper.profile_id import ManagedPathError, ProfileId, ProfileIdError, profile_path
 from superpaper.sp_paths import CONFIG_PATH, TEMP_PATH
@@ -964,6 +965,8 @@ class ProfileData:
         self.zoom = 1.0
         self.offsets = (0.0, 0.0)
         self.cloud_upscale = False
+        self.cloud_upscale_scale = "auto"
+        self.cloud_upscale_sharpen = 0
         self.paths_array = []
         self.selected = None
 
@@ -1093,6 +1096,10 @@ class ProfileData:
                         #     sp_logging.G_LOGGER.info("perspective preset: %s", self.perspective)
                     elif words[0] == "cloud_upscale":
                         self.cloud_upscale = words[1].strip().lower() == "true"
+                    elif words[0] == "cloud_upscale_scale":
+                        self.cloud_upscale_scale = normalize_scale_mode(words[1])
+                    elif words[0] == "cloud_upscale_sharpen":
+                        self.cloud_upscale_sharpen = normalize_sharpen(words[1])
                     elif words[0] == "zoom":
                         try:
                             self.zoom = max(1.0, float(words[1].strip()))
@@ -1505,6 +1512,8 @@ class CLIProfileData(ProfileData):
         self.zoom = 1.0
         self.offsets = (0.0, 0.0)
         self.cloud_upscale = False
+        self.cloud_upscale_scale = "auto"
+        self.cloud_upscale_sharpen = 0
         self.manual_offsets = wpproc.NUM_DISPLAYS * [(0, 0)]
 
         if len(files) == 1 and not advanced:
@@ -1555,6 +1564,8 @@ class TempProfileData:
         self.zoom: float | None = None
         self.align: tuple | None = None
         self.cloud_upscale: bool = False
+        self.cloud_upscale_scale: str = "auto"
+        self.cloud_upscale_sharpen: int = 0
         self.selected: list | None = None
         self.paths_array = []
 
@@ -1620,6 +1631,12 @@ class TempProfileData:
             lines.append("perspective=" + str(self.perspective))
         if self.cloud_upscale:
             lines.append("cloud_upscale=true")
+        scale_mode = normalize_scale_mode(self.cloud_upscale_scale)
+        sharpen = normalize_sharpen(self.cloud_upscale_sharpen)
+        if scale_mode != "auto":
+            lines.append("cloud_upscale_scale=" + scale_mode)
+        if sharpen:
+            lines.append("cloud_upscale_sharpen=" + str(sharpen))
         if self.zoom is not None and self.zoom != 1.0:
             lines.append("zoom=" + str(self.zoom))
         if self.align is not None and tuple(self.align) != (0.0, 0.0):

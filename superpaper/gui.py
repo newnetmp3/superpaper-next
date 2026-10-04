@@ -14,6 +14,7 @@ from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 
 import superpaper.sp_logging as sp_logging
 import superpaper.wallpaper_processing as wpproc
+from superpaper.cloud_upscale import UPSCALE_MODES, normalize_scale_mode, normalize_sharpen
 from superpaper.configuration_dialogs import (
     BrowsePaths,
     DisplayPositionEntry,
@@ -368,6 +369,42 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.cb_cloud_upscale.Bind(wx.EVT_CHECKBOX, self._on_cloud_upscale_changed)
         self.sizer_setting_zoom.Add(self.cb_cloud_upscale, 0, wx.ALL, 5)
+
+        cloud_grid = wx.FlexGridSizer(2, 3, 5, 5)
+        cloud_grid.AddGrowableCol(1, 1)
+        cloud_scale_label = wx.StaticText(statbox_parent_zoom, -1, "AI model:")
+        self.ch_cloud_scale = wx.Choice(
+            statbox_parent_zoom, choices=["Auto (when needed)", "2×", "4×", "8×"]
+        )
+        self.ch_cloud_scale.SetSelection(0)
+        self.ch_cloud_scale.SetToolTip(
+            "Real-ESRGAN supports 2×, 4× and 8× models. Auto upscales only "
+            "when required by display resolution and zoom (up to 4×). "
+            "Selecting a fixed model can use cloud GPU time even when the image is large. "
+            "Returning to a previously used model reuses its cached output."
+        )
+        self.ch_cloud_scale.Bind(wx.EVT_CHOICE, self._on_cloud_quality_changed)
+        cloud_grid.Add(cloud_scale_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
+        cloud_grid.Add(self.ch_cloud_scale, 1, wx.EXPAND)
+        cloud_grid.AddSpacer(1)
+
+        cloud_sharpen_label = wx.StaticText(statbox_parent_zoom, -1, "Sharpen (local):")
+        self.sld_cloud_sharpen = wx.Slider(
+            statbox_parent_zoom, -1, 0, 0, 100, style=wx.SL_HORIZONTAL
+        )
+        self.st_cloud_sharpen = wx.StaticText(
+            statbox_parent_zoom, -1, "0", size=wx.Size(40, -1), style=wx.ALIGN_RIGHT
+        )
+        self.sld_cloud_sharpen.SetToolTip(
+            "Optional sharpness after AI upscaling (0 = original enhancement). "
+            "Computed locally from the cached AI image: adjusting this never uses cloud credits."
+        )
+        self.sld_cloud_sharpen.Bind(wx.EVT_SLIDER, self._on_cloud_quality_changed)
+        cloud_grid.Add(cloud_sharpen_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
+        cloud_grid.Add(self.sld_cloud_sharpen, 1, wx.EXPAND)
+        cloud_grid.Add(self.st_cloud_sharpen, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.sizer_setting_zoom.Add(cloud_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        self._sync_cloud_quality_controls()
 
         # Small undo button to reset scaling & position to defaults without
         # touching the rest of the profile configuration.
@@ -763,6 +800,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.wpprev_pnl.zoom = profile.zoom
         self.wpprev_pnl.offset = profile.offsets
         self.cb_cloud_upscale.SetValue(getattr(profile, "cloud_upscale", False))
+        scale_mode = normalize_scale_mode(getattr(profile, "cloud_upscale_scale", "auto"))
+        self.ch_cloud_scale.SetSelection(UPSCALE_MODES.index(scale_mode))
+        sharpen = normalize_sharpen(getattr(profile, "cloud_upscale_sharpen", 0))
+        self.sld_cloud_sharpen.SetValue(sharpen)
+        self.st_cloud_sharpen.SetLabel(str(sharpen))
+        self._sync_cloud_quality_controls()
 
         # Update wallpaper preview from selected profile
         if self.show_advanced_settings:
@@ -1144,8 +1187,19 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.sld_offy.SetValue(y)
             self.onZoomOffsetChange(None)
 
+    def _sync_cloud_quality_controls(self):
+        enabled = self.cb_cloud_upscale.GetValue() and self.cb_cloud_upscale.IsEnabled()
+        self.ch_cloud_scale.Enable(enabled)
+        self.sld_cloud_sharpen.Enable(enabled)
+
     def _on_cloud_upscale_changed(self, event):
         """Record consent; actual network requests run on the render worker."""
+        self._sync_cloud_quality_controls()
+        self._update_dirty_state()
+
+    def _on_cloud_quality_changed(self, event):
+        """Record model and local sharpness without uploading anything."""
+        self.st_cloud_sharpen.SetLabel(str(self.sld_cloud_sharpen.GetValue()))
         self._update_dirty_state()
 
     def onZoomOffsetChange(self, event):
@@ -1250,6 +1304,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_toggle_children(self.sizer_setting_zoom, enable)
         for sld in (self.sld_zoom, self.sld_offx, self.sld_offy):
             sld.Enable(enable)
+        self._sync_cloud_quality_controls()
 
     def onCheckboxHotkey(self, event):
         cb_state = self.cb_hotkey.GetValue()
@@ -1577,6 +1632,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         tmp_profile = TempProfileData()
         tmp_profile.name = self.tc_name.GetLineText(0)
         tmp_profile.cloud_upscale = self.cb_cloud_upscale.GetValue()
+        tmp_profile.cloud_upscale_scale = UPSCALE_MODES[max(0, self.ch_cloud_scale.GetSelection())]
+        tmp_profile.cloud_upscale_sharpen = self.sld_cloud_sharpen.GetValue()
         tmp_profile.slideshow = self.cb_slideshow.GetValue()
         if tmp_profile.slideshow:
             delay_text = self.tc_sshow_delay.GetLineText(0)

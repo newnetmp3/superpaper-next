@@ -1211,6 +1211,8 @@ def span_single_image_simple(profile, force):
         zoom=profile.zoom,
         enabled=getattr(profile, "cloud_upscale", False),
         cache_root=TEMP_PATH,
+        scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
+        sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
     )
     img_resize = resize_to_fill(
         img, canvas_tuple, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
@@ -1327,6 +1329,8 @@ def span_single_image_advanced(profile, force):
                 zoom=profile.zoom,
                 enabled=getattr(profile, "cloud_upscale", False),
                 cache_root=TEMP_PATH,
+                scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
+                sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
             )
             img_workingsize = resize_to_fill(
                 upscaled, canvas_tuple_proj, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
@@ -1366,6 +1370,8 @@ def span_single_image_advanced(profile, force):
                 zoom=profile.zoom,
                 enabled=getattr(profile, "cloud_upscale", False),
                 cache_root=TEMP_PATH,
+                scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
+                sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
             )
             img_workingsize = resize_to_fill(
                 upscaled, canvas_tuple_eff, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
@@ -1438,6 +1444,8 @@ def set_multi_image_wallpaper(profile, force):
             zoom=profile.zoom,
             enabled=getattr(profile, "cloud_upscale", False),
             cache_root=TEMP_PATH,
+            scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
+            sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
         )
         img_resized.append(
             resize_to_fill(upscaled, res, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size)
