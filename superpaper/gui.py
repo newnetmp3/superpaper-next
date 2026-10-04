@@ -47,7 +47,7 @@ from superpaper.preview_geometry import (
     wheel_scroll_units,
 )
 from superpaper.profile_id import ProfileId, ProfileIdError
-from superpaper.source_paths import IMAGE_EXTENSIONS, source_identity
+from superpaper.source_paths import IMAGE_EXTENSIONS, resolved_wallpaper_selections, source_identity
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
 from superpaper.wallpaper_processing import (
     change_wallpaper_job,
@@ -221,6 +221,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.current_profile_id = None
         self.expected_source_identity = None
         self.loaded_profile = None
+        # Explicit source replacement is separate from wx.ListCtrl focus, which
+        # GTK does not reliably transfer when Select(index) is called.
+        self._pending_source_replacements = {}
         self.sizer_main = wx.BoxSizer(wx.HORIZONTAL)
         self.sizer_top_half = wx.BoxSizer(wx.HORIZONTAL)
         self.SetBackgroundColour(wx.Colour(17, 27, 41))  # wallpaper/monitor preview
@@ -384,7 +387,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
     #
     def create_sizer_profiles(self):
         # choice menu
-        # self.list_of_profiles = list_profiles()
         self.list_of_profiles = self.parent_tray_obj.list_of_profiles
         self.profnames = []
         for prof in self.list_of_profiles:
@@ -1524,6 +1526,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.current_profile_id = profile.profile_id
         self.expected_source_identity = profile.source_identity
         self.loaded_profile = profile
+        self._pending_source_replacements.clear()
         self.tc_name.ChangeValue(profile.name)
 
         self.show_advanced_settings = False
@@ -1649,7 +1652,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         else:
             display_data = self.display_sys.get_disp_list(False)
         self.wpprev_pnl.preview_wallpaper(
-            # profile.next_wallpaper_files(peek=True),
             self.parent_tray_obj.get_profile_by_name(profile.name).next_wallpaper_files(peek=True),
             self.show_advanced_settings,
             self.use_multi_image,
@@ -1829,7 +1831,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def update_choiceprofile(self):
         """Reload profile list into the choice box."""
-        # self.list_of_profiles = list_profiles()
         self.list_of_profiles = self.parent_tray_obj.list_of_profiles
         self.profnames = []
         for prof in self.list_of_profiles:
@@ -2522,22 +2523,25 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def _preview_source_path(self, path):
         """Update the real wallpaper preview without saving or applying."""
-        if os.path.isdir(path):
-            candidate = next(
-                (
-                    os.path.join(path, name)
-                    for name in sorted(os.listdir(path))
-                    if name.lower().endswith(wpproc.G_SUPPORTED_IMAGE_EXTENSIONS)
-                ),
-                None,
-            )
-        else:
-            candidate = path
-        if candidate is None:
+        # Show the same complete positional image selection the renderer will
+        # receive, not just the changed target's thumbnail. This is important
+        # for multiple displays and advanced span groups.
+        profile, _groups = self._collect_temp_profile(resolve_selection=True)
+        preview_files = profile.selected
+        if not preview_files:
+            if os.path.isdir(path):
+                preview_files = [
+                    os.path.join(path, filename)
+                    for filename in sorted(os.listdir(path))
+                    if filename.lower().endswith(wpproc.G_SUPPORTED_IMAGE_EXTENSIONS)
+                ][:1]
+            else:
+                preview_files = [path]
+        if not preview_files:
             return
         display_data = self.display_sys.get_disp_list(self.show_advanced_settings)
         self.wpprev_pnl.preview_wallpaper(
-            [candidate],
+            preview_files,
             self.show_advanced_settings,
             self.use_multi_image,
             display_data,
@@ -2580,8 +2584,16 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             existing_target = self.path_listctrl.GetItemText(index, 0) if columns == 2 else ""
             existing_path = self.path_listctrl.GetItemText(index, columns - 1)
             if source_identity(existing_path, existing_target) == candidate:
-                self.path_listctrl.Select(index)
+                self.path_listctrl.SetItemState(
+                    index,
+                    wx.LIST_STATE_SELECTED | wx.LIST_STATE_FOCUSED,
+                    wx.LIST_STATE_SELECTED | wx.LIST_STATE_FOCUSED,
+                )
                 break
+        # The renderer uses the serialized profile's selected= entry. Store
+        # the explicit choice in the correct display/group slot even when GTK
+        # leaves an older row with keyboard focus or multiple images are used.
+        self._pending_source_replacements[target] = path
         self._preview_source_path(path)
         self._update_dirty_state()
 
@@ -2638,8 +2650,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 self.onCreateNewProfile(event)
             else:
                 self.populate_fields(self.list_of_profiles[item])
-        else:
-            pass
 
     def onRevert(self, event):
         """Discards unsaved changes and reloads the saved profile from disk."""
@@ -2693,14 +2703,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             while thrd is not None and thrd.is_alive():
                 wx.YieldIfNeeded()
                 time.sleep(0.05)
-            # The applied image becomes the current selection so reopening the
-            # dialog (or a later render) shows the same wallpaper instead of
-            # reverting to the previously saved one (#158). Persist it on the
-            # live profile instance.
-            if tmp_profile.selected:
-                live = self._loaded_profile_with_selection()
-                if live is not None:
-                    live.set_selected_wallpaper(tmp_profile.selected, persist=True)
+            # Apply is intentionally temporary: writing selected= to the
+            # saved profile here can leave an orphaned image reference when the
+            # replacement only exists in the unsaved source list. Save and
+            # Save & Apply are the explicit persistence boundaries.
             if hasattr(self, "studio_status"):
                 self.studio_status.SetLabel("Render finished. Check the desktop for the applied wallpaper.")
         finally:
@@ -2711,8 +2717,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             del busy
 
     def _get_selected_wallpaper_path(self):
-        """Get the file path of the currently selected item in the wallpaper list."""
-        item_idx = self.path_listctrl.GetFocusedItem()
+        """Get the selected source; GTK's focused item may be different."""
+        item_idx = self.path_listctrl.GetFirstSelected()
+        if item_idx == -1:
+            item_idx = self.path_listctrl.GetFocusedItem()
         if item_idx == -1:
             return None
         columns = self.path_listctrl.GetColumnCount()
@@ -2740,11 +2748,11 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         Returns a ``(tmp_profile, groups)`` tuple where ``groups`` is the span
         groups mapping (or ``None``) used for the preview.
 
-        When ``resolve_selection`` is True the persistent wallpaper selection is
-        filled in (from the focused list item, falling back to the saved
-        profile). It is left out for change-tracking, where the background
-        selection must not count as an unsaved profile change. This method never
-        raises on partial input so it is safe to call on every field edit.
+        When ``resolve_selection`` is True the image selection is reconciled
+        with the actual source paths for every monitor or span group, preferring
+        an explicit Change Image replacement and retaining valid prior choices.
+        It is omitted from change-tracking, since Apply must be unsaved.
+        This method never raises on partial field input.
         """
         tmp_profile = TempProfileData()
         tmp_profile.name = self.tc_name.GetLineText(0)
@@ -2808,32 +2816,14 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             tmp_profile.zoom = self.sld_zoom.GetValue() / 100.0
             tmp_profile.align = (self.sld_offx.GetValue() / 100.0, self.sld_offy.GetValue() / 100.0)
 
-        # wallpaper selection (persistent). For single/advanced span the
-        # focused list item is the chosen image. If the user didn't pick a new
-        # one, preserve any selection already saved in the profile. Skipped for
-        # change-tracking, where the background selection is not a profile change.
-        if resolve_selection and tmp_profile.spanmode != "multi":
-            selected_file = self._get_selected_wallpaper_path()
-            if selected_file and os.path.isfile(selected_file):
-                tmp_profile.selected = [selected_file]
-            else:
-                # No new image picked in the list: preserve the selection of the
-                # profile currently open in the dialog. Look it up by the original
-                # (dropdown) name, NOT tmp_profile.name, which may have just been
-                # edited (rename) and not exist on disk yet -- otherwise the
-                # selection is lost and the preview/applied image cycles (#158).
-                existing = self._loaded_profile_with_selection()
-                if existing and existing.selected:
-                    tmp_profile.selected = existing.selected
-
         # span groups
         groups = None
         if self.cb_spangroups.GetValue():
             groups = self.read_spangroups()
             flat_groups = []
             if groups is not None:
-                for grp in groups:
-                    ids = "".join([str(i) for i in groups[grp]])
+                for grp in sorted(groups):
+                    ids = "".join(str(i) for i in groups[grp])
                     flat_groups.append(ids)
             tmp_profile.spangroups = ",".join(flat_groups)
 
@@ -2849,6 +2839,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
         # format paths
         if columns == 1:
+            target_ids = [""]
             flat_contents = [path for row in path_lc_contents for path in row]
             semicol_sep_paths = ";".join(flat_contents)
             tmp_profile.paths_array.append(semicol_sep_paths)
@@ -2861,9 +2852,27 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                     paths_dict[disp_id].append(path_item)
                 else:
                     paths_dict[disp_id] = [path_item]
-            for disp_id in paths_dict:
+            target_ids = list(paths_dict)
+            for disp_id in target_ids:
                 semicol_sep_paths = ";".join(paths_dict[disp_id])
                 tmp_profile.paths_array.append(semicol_sep_paths)
+
+        if resolve_selection:
+            previous = self.loaded_profile.selected if self.loaded_profile is not None else None
+            replacements = dict(self._pending_source_replacements)
+            if len(target_ids) == 1 and not replacements:
+                # Only the single-source view uses list selection as a direct
+                # wallpaper choice. In multi/group mode each target must keep
+                # its own current image unless explicitly replaced.
+                selected_path = self._get_selected_wallpaper_path()
+                if selected_path:
+                    replacements[target_ids[0]] = selected_path
+            tmp_profile.selected = resolved_wallpaper_selections(
+                [paths.split(";") for paths in tmp_profile.paths_array],
+                previous,
+                replacements,
+                targets=target_ids,
+            )
 
         return tmp_profile, groups
 
@@ -2929,6 +2938,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.current_profile_id = saved_profile.profile_id
             self.expected_source_identity = saved_profile.source_identity
             self.loaded_profile = saved_profile
+            self._pending_source_replacements.clear()
             if self.show_advanced_settings:
                 display_data = self.display_sys.get_disp_list(True)
             else:
@@ -2961,6 +2971,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.current_profile_id = None
         self.expected_source_identity = None
         self.loaded_profile = None
+        self._pending_source_replacements.clear()
         self.choice_profiles.SetSelection(self.choice_profiles.FindString("Create a new profile"))
 
         self.tc_name.ChangeValue("")
@@ -3054,8 +3065,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.parent_tray_obj.reload_profiles(event)
             self.update_choiceprofile()
             self.onCreateNewProfile(None)
-        else:
-            pass
 
     def onAlignTest(self, event):
         """Align test, takes alignment settings from open profile and sets a test image wp."""
