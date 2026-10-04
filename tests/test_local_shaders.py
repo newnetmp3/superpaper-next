@@ -217,3 +217,108 @@ def test_error_detail_keeps_initial_filter_failure_not_only_footer():
     assert "Vulkan format negotiation failed" in result
     assert "Invalid argument" in result
     assert len(result) < 4001
+
+
+def test_mpv_pipeline_helpers_are_not_standalone_preset_options(tmp_path):
+    shader_root = tmp_path / "pack"
+    shader_root.mkdir()
+    (shader_root / "Anime4K_AutoDownscalePre_x2.glsl").write_bytes(HOOK)
+    (shader_root / NAME).write_bytes(HOOK)
+    choices = local_shaders.available_shaders(shader_root=shader_root)
+    assert NAME in choices
+    assert "Anime4K_AutoDownscalePre_x2.glsl" not in choices
+    assert local_shaders.resolve_shader_chain(
+        "Anime4K_AutoDownscalePre_x2.glsl", shader_root=shader_root
+    ) == ()
+
+
+def test_preset_modes_resolve_ordered_real_mpv_files(tmp_path):
+    folder = tmp_path / "shaders"
+    folder.mkdir()
+    for name in (
+        "Anime4K_Restore_CNN_M.glsl",
+        "Anime4K_Restore_CNN_Soft_M.glsl",
+        "Anime4K_Upscale_CNN_x2_M.glsl",
+        "Anime4K_Upscale_Denoise_CNN_x2_M.glsl",
+    ):
+        (folder / name).write_bytes(HOOK)
+    for mode, expected in (
+        ("Anime4K_Mode_A", ["Restore_CNN_M", "Upscale_CNN_x2_M"]),
+        ("Anime4K_Mode_B", ["Restore_CNN_Soft_M", "Upscale_CNN_x2_M"]),
+        ("Anime4K_Mode_C", ["Upscale_Denoise_CNN_x2_M"]),
+    ):
+        stages = local_shaders.resolve_shader_chain(mode, shader_root=folder)
+        assert [p.name.removeprefix("Anime4K_").removesuffix(".glsl") for p in stages] == expected
+        assert mode in local_shaders.available_shaders(shader_root=folder)
+        assert local_shaders.normalize_shader(mode) == mode
+        assert local_shaders.shader_output_size((40, 20), (80, 40), 1, mode) == (80, 40)
+    (folder / "Anime4K_Upscale_CNN_x2_M.glsl").unlink()
+    assert "Anime4K_Mode_A" not in local_shaders.available_shaders(shader_root=folder)
+    assert "Anime4K_Mode_B" not in local_shaders.available_shaders(shader_root=folder)
+    assert "Anime4K_Mode_C" in local_shaders.available_shaders(shader_root=folder)
+
+
+def test_shader_mode_composes_mpv_hook_passes_in_order_and_caches(tmp_path, monkeypatch):
+    shader_root = tmp_path / "shaderpack"
+    shader_root.mkdir()
+    restore = shader_root / "Anime4K_Restore_CNN_M.glsl"
+    upscale = shader_root / "Anime4K_Upscale_CNN_x2_M.glsl"
+    restore.write_bytes(HOOK + b"// restore\n")
+    upscale.write_bytes(HOOK + b"// upscale\n")
+    monkeypatch.setattr(local_shaders.shutil, "which", lambda executable: "/usr/bin/ffmpeg")
+    calls = []
+
+    def render(command, **kwargs):
+        assert "-vf" in command
+        assert "custom_shader_path=" in command[command.index("-vf") + 1]
+        shader_path = Path(command[-1]).parent / "shader.glsl"
+        data = shader_path.read_bytes()
+        assert data.index(b"// restore") < data.index(b"// upscale")
+        assert data.count(b"//!HOOK MAIN") == 2
+        calls.append(command)
+        Image.new("RGB", (64, 48), "blue").save(command[-1])
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(local_shaders.subprocess, "run", render)
+    image = Image.new("RGB", (32, 24), "pink")
+    processed = local_shaders.apply_image_shader(
+        image,
+        "Anime4K_Mode_A",
+        (64, 48),
+        cache_root=tmp_path / "cache",
+        shader_root=shader_root,
+    )
+    assert processed.size == (64, 48)
+    assert len(calls) == 1
+    again = local_shaders.apply_image_shader(
+        image,
+        "Anime4K_Mode_A",
+        (64, 48),
+        cache_root=tmp_path / "cache",
+        shader_root=shader_root,
+    )
+    assert again.tobytes() == processed.tobytes()
+    assert len(calls) == 1
+
+
+def test_ffmpeg_failure_diagnoses_vulkan_without_anime4k(tmp_path, monkeypatch):
+    installed = tmp_path / "shaderpack"
+    installed.mkdir()
+    (installed / NAME).write_bytes(HOOK)
+    monkeypatch.setattr(local_shaders.shutil, "which", lambda binary: "/usr/bin/ffmpeg")
+    commands = []
+
+    def render(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=234, stderr="Vulkan ICD unavailable\nFilter graph error")
+
+    monkeypatch.setattr(local_shaders.subprocess, "run", render)
+    with pytest.raises(ValueError):
+        local_shaders._validate_entry("Anime4K_Mode_A", HOOK)
+    source = Image.new("RGB", (30, 20), "pink")
+    assert local_shaders.apply_image_shader(
+        source, NAME, (60, 40), shader_root=installed, cache_root=tmp_path
+    ) is source
+    assert len(commands) == 3
+    assert "color=c=gray:s=64x64:d=0.1" in commands[-1]
+    assert "libplacebo=w=64:h=64" in commands[-1]
