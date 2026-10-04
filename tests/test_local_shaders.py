@@ -166,3 +166,54 @@ def test_real_render_wires_selected_shader_without_cloud(profile_modules, tmp_pa
     )
     assert wpproc.span_single_image_simple(profile, force=True) == 0
     assert calls == [(NAME, (60, 40))]
+
+
+def test_libplacebo_graph_prefers_software_frames_without_manual_hwupload():
+    hook = Path("/tmp/shader.glsl")
+    direct = local_shaders.shader_filtergraph((120, 80), hook, "direct")
+    assert direct.startswith("libplacebo=w=120:h=80:custom_shader_path=")
+    assert "hwupload" not in direct
+    assert direct.endswith("format=rgb24,format=rgb24")
+    fallback = local_shaders.shader_filtergraph((120, 80), hook, "hardware-upload")
+    assert "format=rgba,hwupload,libplacebo=" in fallback
+    assert fallback.endswith("hwdownload,format=rgba")
+    with pytest.raises(ValueError):
+        local_shaders.shader_filtergraph((120, 80), hook, "invalid")
+
+
+def test_shader_tries_compatibility_graph_after_filter_failure(tmp_path, monkeypatch):
+    shader_root = tmp_path / "shader"
+    shader_root.mkdir()
+    (shader_root / NAME).write_bytes(HOOK)
+    monkeypatch.setattr(local_shaders.shutil, "which", lambda executable: "/usr/bin/ffmpeg")
+    commands = []
+
+    def render(command, **kwargs):
+        commands.append(command)
+        graph = command[command.index("-vf") + 1]
+        if len(commands) == 1:
+            assert "hwupload" not in graph
+            return SimpleNamespace(returncode=1, stderr="[AVFilterGraph] Error initializing filters")
+        assert "hwupload" in graph
+        Image.new("RGB", (32, 24), "green").save(command[-1])
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(local_shaders.subprocess, "run", render)
+    source = Image.new("RGB", (32, 24), "red")
+    kwargs = {"shader_root": shader_root, "cache_root": tmp_path / "cache"}
+    output = local_shaders.apply_image_shader(source, NAME, (64, 48), **kwargs)
+    assert output.getpixel((0, 0)) == (0, 128, 0)
+    assert len(commands) == 2
+    cached = local_shaders.apply_image_shader(source, NAME, (64, 48), **kwargs)
+    assert cached.tobytes() == output.tobytes()
+    assert len(commands) == 2
+
+
+def test_error_detail_keeps_initial_filter_failure_not_only_footer():
+    messages = ["[AVFilterGraph] Vulkan format negotiation failed"]
+    messages.extend(f"verbose detail {i}" for i in range(32))
+    messages.append("Error opening output file: Invalid argument")
+    result = local_shaders.shader_error_detail("\n".join(messages))
+    assert "Vulkan format negotiation failed" in result
+    assert "Invalid argument" in result
+    assert len(result) < 4001
