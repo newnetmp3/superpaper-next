@@ -23,6 +23,34 @@ This fork focuses on KDE Plasma 6 support and improving the wallpaper selection 
 - **Cycling on demand only**: the wallpaper changes when the slideshow timer fires or when you pick "Next Wallpaper" from the tray, never just because a profile was re-rendered
 - **Consistent preview after save**: the preview shows your selected wallpaper instead of a random pick from a freshly shuffled list
 
+### Wallpaper Studio UI
+
+The native wxPython configuration window now opens in **Wallpaper Studio**,
+with a larger persistent three-monitor preview and a left-side workspace
+navigator. Switching workspaces preserves unsaved changes:
+
+- **Wallpapers:** wallpaper sources, span mode, zoom and XY placement.
+- **Displays:** real system display options, bezel/diagonal calibration, and
+  profile-scoped advanced spanning offsets and groups.
+- **Profiles:** a thumbnail gallery of saved profiles, with selection, create,
+  duplicate and delete actions. The usual profile dropdown stays available
+  across every workspace.
+- **Processing:** cloud AI upscaling, optional local Anime4K GLSL shaders,
+  local sharpening and live-adjustable brightness, contrast and saturation.
+  Local adjustments require no Internet access or API credits.
+- **Advanced:** slideshow playback and hotkeys.
+
+Above the workspace, the preview offers **Split original / locally adjusted**
+and **All monitors / Monitor N** views. The split compares the original source
+against your locally adjusted preview; cloud AI enhancement and GLSL shader
+effects are applied to the final wallpaper, rather than simulated in the
+preview. Drag on a monitor image to adjust wallpaper positioning, or use the
+zoom and horizontal/vertical sliders in Wallpapers.
+
+The primary **Save & Apply** action is visible in the header and the bottom
+action bar; **Apply** alone still tests without saving. Existing profile
+settings and wallpaper engine behavior remain compatible with older profiles.
+
 ### Image Scaling & Position
 - **Always fills the screen**: images are cover-fitted so there is never any letterboxing
 - **Zoom**: zoom further into the image while it keeps filling the display
