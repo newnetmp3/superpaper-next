@@ -1,11 +1,11 @@
 """Manual display offsets, physical placement and bezel-entry dialog."""
 
+import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
+
 import superpaper.wallpaper_processing as wpproc
 from superpaper.help_dialog import HelpPopup
 from superpaper.message_dialog import show_message_dialog
 from superpaper.sp_paths import TRAY_ICON
-
-import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
 
 
 class DisplayPositionEntry(wx.Frame):
