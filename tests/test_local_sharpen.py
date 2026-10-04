@@ -197,7 +197,7 @@ def test_preview_comparison_remains_local_even_when_cloud_is_enabled():
     gui = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
     tree = ast.parse(gui.read_text(encoding="utf-8"))
     panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
-    method = next(node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap")
+    method = [node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap"][-1]
     implementation = ast.unparse(method)
     assert "if self.compare_original:" in implementation
     assert "split_local_preview(" in implementation
