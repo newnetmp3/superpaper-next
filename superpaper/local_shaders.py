@@ -38,7 +38,7 @@ _PRESET_RE = re.compile(r"^Anime4K_Mode_[ABC]$")
 # it must run after an Upscale pass, and must not appear in the effect picker.
 _PRESET_STAGES = {
     "Anime4K_Mode_A": ("Restore_CNN", "Upscale_CNN_x2"),
-    "Anime4K_Mode_B": ("Restore_Soft_CNN", "Upscale_CNN_x2"),
+    "Anime4K_Mode_B": ("Restore_CNN_Soft", "Upscale_CNN_x2"),
     "Anime4K_Mode_C": ("Upscale_Denoise_CNN_x2",),
 }
 _VARIANT_ORDER = ("M", "S", "L", "VL", "UL")
@@ -136,7 +136,7 @@ def _validate_entry(name, data):
     if ".." in parts or Path(name).is_absolute():
         raise ShaderImportError("Shader archive contains an unsafe path.")
     basename = Path(name).name
-    if not normalize_shader(basename):
+    if not _SHADER_RE.fullmatch(basename):
         return None
     if len(data) > MAX_SHADER_BYTES or b"//!HOOK " not in data:
         raise ShaderImportError("Invalid or excessively large Anime4K shader: " + basename)
@@ -236,6 +236,39 @@ def shader_error_detail(stderr):
     return "\n".join((lines[:12] + lines[-4:]) if len(lines) > 16 else lines)[:4000]
 
 
+def diagnose_ffmpeg_backend(ffmpeg):
+    """Test bare Vulkan/libplacebo without shaders to separate GPU from GLSL faults."""
+    command = [
+        ffmpeg,
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "verbose",
+        "-init_hw_device",
+        "vulkan=vk",
+        "-filter_hw_device",
+        "vk",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=gray:s=64x64:d=0.1",
+        "-vf",
+        "libplacebo=w=64:h=64",
+        "-frames:v",
+        "1",
+        "-f",
+        "null",
+        "-",
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=20)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "Baseline FFmpeg Vulkan test could not run: " + str(exc)
+    if result.returncode:
+        return "Baseline libplacebo/Vulkan failed without Anime4K: " + shader_error_detail(result.stderr)
+    return "Baseline libplacebo/Vulkan succeeded: check selected GLSL hook compatibility and pixel format."
+
+
 def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, shader_root=None):
     """Apply the chosen shader on the local Vulkan GPU; fail open to image.
 
@@ -328,9 +361,9 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
                 )
             if not rendered:
                 LOGGER.warning(
-                    "Anime4K shader %s could not render using either FFmpeg path. "
-                    "Check ffmpeg -h filter=libplacebo for custom_shader_path and verify Vulkan via vulkaninfo.",
+                    "Anime4K shader %s could not render using either FFmpeg path. %s",
                     name,
+                    diagnose_ffmpeg_backend(ffmpeg),
                 )
                 return image
             with Image.open(output) as rendered:
