@@ -6,6 +6,7 @@ unit testing the image controls through the existing rendering test suite.
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 GUI = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
 
@@ -260,7 +261,79 @@ def test_cloud_checkbox_cannot_push_reset_view_into_processing_inspector():
         "self.studio_canvas_column.Show(self.studio_preview_tools, show=name != 'Profiles', recursive=True)"
         in switching
     )
-    assert "self.studio_compare_row.Show(self.studio_compare_state, show=self.studio_compare.GetValue())" in switching
+    assert "self._studio_sync_compare_workspace(name)" in switching
+
+
+
+def test_displays_hides_split_comparison_without_resetting_user_preference():
+    """Exercise the workspace handler without importing wx on headless CI."""
+    namespace = {}
+    exec(_method("WallpaperSettingsPanel", "_studio_sync_compare_workspace"), namespace)
+    sync = namespace["_studio_sync_compare_workspace"]
+
+    class Sizer:
+        def __init__(self):
+            self.calls = []
+
+        def Show(self, child, *, show, recursive=False):
+            self.calls.append((child, show, recursive))
+
+    compare_row = Sizer()
+    toolbar = Sizer()
+    checkbox = SimpleNamespace(GetValue=lambda: True)
+    preview = SimpleNamespace(compare_original=True, zoom=1.0, offset=(0.0, 0.0))
+    refreshes = []
+    preview.update_zoom_offset = lambda zoom, offset: refreshes.append((zoom, offset))
+    panel = SimpleNamespace(
+        studio_preview_tools=toolbar,
+        studio_compare_row=compare_row,
+        studio_compare_state=object(),
+        studio_compare=checkbox,
+        wpprev_pnl=preview,
+    )
+
+    sync(panel, "Displays")
+    assert toolbar.calls[-1] == (compare_row, False, True)
+    assert compare_row.calls[-1] == (panel.studio_compare_state, False, False)
+    assert preview.compare_original is False
+    assert refreshes == [(1.0, (0.0, 0.0))]
+    # Changing workspaces is not a user edit: preserve the checked state.
+    assert checkbox.GetValue() is True
+
+    sync(panel, "Processing")
+    assert toolbar.calls[-1] == (compare_row, True, True)
+    assert compare_row.calls[-1] == (panel.studio_compare_state, True, False)
+    assert preview.compare_original is True
+    assert len(refreshes) == 2
+
+    sync(panel, "Wallpapers")
+    assert preview.compare_original is True
+    assert len(refreshes) == 2  # No redundant image render.
+
+
+def test_comparison_remains_off_if_user_had_not_enabled_it():
+    namespace = {}
+    exec(_method("WallpaperSettingsPanel", "_studio_sync_compare_workspace"), namespace)
+    sync = namespace["_studio_sync_compare_workspace"]
+
+    class Sizer:
+        def Show(self, *_args, **_kwargs):
+            pass
+
+    preview = SimpleNamespace(compare_original=False)
+    preview.update_zoom_offset = lambda *_args: (_ for _ in ()).throw(AssertionError("Unexpected redraw"))
+    panel = SimpleNamespace(
+        studio_preview_tools=Sizer(),
+        studio_compare_row=Sizer(),
+        studio_compare_state=object(),
+        studio_compare=SimpleNamespace(GetValue=lambda: False),
+        wpprev_pnl=preview,
+    )
+    sync(panel, "Displays")
+    sync(panel, "Wallpapers")
+    assert preview.compare_original is False
+    feedback = _method("WallpaperSettingsPanel", "_studio_update_compare_feedback")
+    assert "self._workspace not in ('Displays', 'Profiles')" in feedback
 
 
 def test_comparison_feedback_remains_compact_when_cloud_is_toggled():
