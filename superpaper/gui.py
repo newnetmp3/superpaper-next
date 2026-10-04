@@ -732,6 +732,195 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_bottom_buttonrow.Add(self.button_save_apply, 0, wx.ALL, 5)
         self.sizer_bottom_buttonrow.Add(self.button_close, 0, wx.ALL, 5)
 
+    def create_studio_navigation(self):
+        """Persistent navigation, status, and image preview controls."""
+        self.studio_sidebar = wx.Panel(self, size=wx.Size(164, -1))
+        self.studio_sidebar.SetBackgroundColour(wx.Colour(25, 34, 48))
+        column = wx.BoxSizer(wx.VERTICAL)
+        heading = wx.StaticText(self.studio_sidebar, label="SUPERPAPER\nNEXT")
+        heading.SetForegroundColour(wx.Colour(240, 244, 252))
+        font = heading.GetFont()
+        font.SetPointSize(font.GetPointSize() + 4)
+        font.SetWeight(wx.FONTWEIGHT_BOLD)
+        heading.SetFont(font)
+        column.Add(heading, 0, wx.ALL, 14)
+        self.studio_navigation = {}
+        for name in ("Wallpapers", "Displays", "Profiles", "Processing", "Advanced"):
+            button = wx.Button(self.studio_sidebar, label=name)
+            button.Bind(wx.EVT_BUTTON, lambda event, workspace=name: self._set_studio_workspace(workspace))
+            column.Add(button, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 7)
+            self.studio_navigation[name] = button
+        column.AddStretchSpacer()
+        footer = wx.StaticText(self.studio_sidebar, label="Local-first effects\nCloud AI optional")
+        footer.SetForegroundColour(wx.Colour(190, 201, 220))
+        column.Add(footer, 0, wx.ALL, 14)
+        self.studio_sidebar.SetSizer(column)
+
+        self.studio_header = wx.BoxSizer(wx.HORIZONTAL)
+        title = wx.StaticText(self, label="Wallpaper Studio")
+        font = title.GetFont()
+        font.SetPointSize(font.GetPointSize() + 7)
+        font.SetWeight(wx.FONTWEIGHT_BOLD)
+        title.SetFont(font)
+        self.studio_header.Add(title, 1, wx.ALIGN_CENTER_VERTICAL)
+        self.studio_apply = wx.Button(self, label="Save && Apply")
+        self.studio_apply.Bind(wx.EVT_BUTTON, self.onSaveAndApply)
+        self.studio_header.Add(self.studio_apply, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+
+        self.studio_preview_tools = wx.BoxSizer(wx.HORIZONTAL)
+        self.studio_compare = wx.CheckBox(self, label="Split original / locally adjusted")
+        self.studio_compare.SetToolTip(
+            "Compare the original image (left) with local adjustments (right). "
+            "Cloud AI and Vulkan shader effects appear only on the applied wallpaper."
+        )
+        self.studio_compare.Bind(wx.EVT_CHECKBOX, self._studio_toggle_compare)
+        self.studio_preview_tools.Add(self.studio_compare, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.studio_preview_tools.AddStretchSpacer()
+        self.studio_preview_tools.Add(
+            wx.StaticText(self, label="Preview view:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
+        )
+        self.studio_monitor_choice = wx.Choice(self, choices=["All monitors"])
+        self.studio_monitor_choice.SetSelection(0)
+        self.studio_monitor_choice.Bind(wx.EVT_CHOICE, self._studio_choose_monitor)
+        self.studio_preview_tools.Add(self.studio_monitor_choice, 0, wx.ALIGN_CENTER_VERTICAL)
+        self.studio_workspace_title = wx.StaticText(self, label="WALLPAPERS")
+        font = self.studio_workspace_title.GetFont()
+        font.SetPointSize(font.GetPointSize() + 2)
+        font.SetWeight(wx.FONTWEIGHT_BOLD)
+        self.studio_workspace_title.SetFont(font)
+        self.studio_status = wx.StaticText(
+            self, label="Ready. Drag the wallpaper image in the preview to reposition it."
+        )
+        self._refresh_studio_monitor_options()
+
+    def _set_studio_workspace(self, name):
+        """Switch workspaces without discarding unsaved form values."""
+        if name not in self._workspace_sizers:
+            return
+        self._workspace = name
+        for key, section in self._workspace_sizers.items():
+            self.sizer_bottom_half.Show(section, show=key == name)
+        self.studio_workspace_title.SetLabel(name.upper())
+        for key, button in self.studio_navigation.items():
+            selected = key == name
+            button.SetBackgroundColour(wx.Colour(40, 113, 210) if selected else wx.Colour(41, 52, 70))
+            button.SetForegroundColour(wx.Colour(255, 255, 255))
+            button.Refresh()
+        if name == "Profiles":
+            self._refresh_profile_gallery()
+        self.sizer_bottom_half.Layout()
+        self.sizer_main.Layout()
+        self.FitInside()
+        self.Scroll(0, 0)
+        self.resized = True
+
+    def _studio_toggle_compare(self, event):
+        self.wpprev_pnl.compare_original = self.studio_compare.GetValue()
+        self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+
+    def _refresh_studio_monitor_options(self):
+        count = len(self.display_sys.disp_list)
+        selected = self.studio_monitor_choice.GetSelection()
+        self.studio_monitor_choice.SetItems(["All monitors", *[f"Monitor {i + 1}" for i in range(count)]])
+        self.studio_monitor_choice.SetSelection(min(max(selected, 0), count))
+
+    def _studio_choose_monitor(self, event):
+        self.wpprev_pnl.focus_monitor = self.studio_monitor_choice.GetSelection()
+        self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+
+    def create_studio_gallery(self):
+        """Profiles are displayed with actual wallpaper thumbnails."""
+        self.sizer_gallery.Add(
+            wx.StaticText(self, label="Saved profiles - select a thumbnail to edit or apply."),
+            0, wx.ALL, 5,
+        )
+        self.gallery_list = wx.ListCtrl(self, style=wx.LC_ICON | wx.LC_SINGLE_SEL)
+        self.gallery_list.SetMinSize(wx.Size(550, 245))
+        self.gallery_list.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_gallery_selected)
+        self.sizer_gallery.Add(self.gallery_list, 1, wx.EXPAND | wx.ALL, 5)
+        actions = wx.BoxSizer(wx.HORIZONTAL)
+        for label, handler in (
+            ("New profile", self._studio_new_profile),
+            ("Duplicate", self._studio_duplicate_profile),
+            ("Delete", self.onDeleteProfile),
+        ):
+            button = wx.Button(self, label=label)
+            button.Bind(wx.EVT_BUTTON, handler)
+            actions.Add(button, 0, wx.RIGHT, 8)
+        self.sizer_gallery.Add(actions, 0, wx.ALL, 5)
+        self._building_gallery = False
+
+    def _refresh_profile_gallery(self):
+        if not hasattr(self, "gallery_list"):
+            return
+        self._building_gallery = True
+        try:
+            thumbs = wx.ImageList(156, 95)
+            self.gallery_list.DeleteAllItems()
+            self._gallery_profile_names = []
+            current = self.tc_name.GetValue()
+            for profile in self.list_of_profiles:
+                bitmap = wx.Bitmap.FromRGBA(156, 95, red=29, green=36, blue=46, alpha=255)
+                images = profile.next_wallpaper_files(peek=True)
+                if images and os.path.isfile(images[0]):
+                    try:
+                        with Image.open(images[0]) as source:
+                            original = ImageOps.exif_transpose(source)
+                            original.thumbnail((156, 95), Image.Resampling.LANCZOS)
+                            canvas = Image.new("RGB", (156, 95), (29, 36, 46))
+                            canvas.paste(original.convert("RGB"), ((156 - original.width) // 2, (95 - original.height) // 2))
+                            bitmap = wx.Bitmap.FromBuffer(156, 95, canvas.tobytes())
+                    except (OSError, ValueError):
+                        pass
+                thumb = thumbs.Add(bitmap)
+                row = self.gallery_list.InsertItem(self.gallery_list.GetItemCount(), profile.name, thumb)
+                self._gallery_profile_names.append(profile.name)
+                if profile.name == current:
+                    self.gallery_list.SetItemState(row, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
+            self.gallery_list.AssignImageList(thumbs, wx.IMAGE_LIST_NORMAL)
+        finally:
+            self._building_gallery = False
+
+    def _on_gallery_selected(self, event):
+        if self._building_gallery:
+            return
+        index = event.GetIndex()
+        if 0 <= index < len(self._gallery_profile_names):
+            name = self._gallery_profile_names[index]
+            profile = self.parent_tray_obj.get_profile_by_name(name)
+            if profile is not None:
+                self.choice_profiles.SetSelection(self.choice_profiles.FindString(name))
+                self.populate_fields(profile)
+                self.studio_status.SetLabel(f"Selected profile: {name}")
+
+    def _studio_new_profile(self, event):
+        self.onCreateNewProfile(None)
+        self._set_studio_workspace("Wallpapers")
+        self.studio_status.SetLabel("New profile: enter a name, select images, then Save & Apply.")
+
+    def _studio_duplicate_profile(self, event):
+        """Create a new managed profile with this profile's unsaved edits."""
+        if self.loaded_profile is None:
+            self.studio_status.SetLabel("Select an existing profile to duplicate.")
+            return
+        name = self.tc_name.GetValue()
+        names = {p.name for p in self.list_of_profiles}
+        duplicate = ""
+        for count in range(1, 1000):
+            suffix = f"-{count}"
+            candidate = name[: 14 - len(suffix)] + suffix
+            if candidate not in names:
+                duplicate = candidate
+                break
+        if not duplicate:
+            self.studio_status.SetLabel("No unused profile name is available.")
+            return
+        self.current_profile_id = None
+        self.expected_source_identity = None
+        self.tc_name.ChangeValue(duplicate)
+        if self.onSave(None) is not None:
+            self.studio_status.SetLabel(f"Duplicated profile: {duplicate}")
+
     #
     # Profile loading and display methods
     #
