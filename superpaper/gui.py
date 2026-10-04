@@ -1285,7 +1285,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                         oriented.convert("RGB"),
                         ((width - oriented.width) // 2, (height - oriented.height) // 2),
                     )
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 pass
         return wx.Bitmap.FromBuffer(width, height, canvas.tobytes())
 
