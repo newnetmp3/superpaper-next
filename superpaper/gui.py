@@ -3033,6 +3033,7 @@ class WallpaperPreviewPanel(wx.Panel):
         self.Bind(wx.EVT_PAINT, self.OnPaint)
         self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self._on_background_capture_lost)
         self.bind_background_drag()
+        self.bind_wallpaper_bitmap_drag()
         self.SetToolTip("Drag the image to reposition it; zoom in for more movement.")
 
     def preview_area_ready(self):
@@ -3747,6 +3748,26 @@ class WallpaperPreviewPanel(wx.Panel):
         self.Bind(wx.EVT_LEFT_UP, self._on_background_up)
         self.Bind(wx.EVT_MOTION, self._on_background_motion)
 
+    def bind_wallpaper_bitmap_drag(self):
+        """Bitmap children receive mouse events before their parent panel.
+
+        Mouse events are not command events, so clicking a displayed wallpaper
+        does not bubble up to the preview panel. Bind each rendered bitmap once
+        rather than rebinding when entering/exiting monitor arrangement mode.
+        """
+        for bitmap in (self.st_bmp_canvas, *self.preview_img_list):
+            bitmap.Bind(wx.EVT_LEFT_DOWN, self._on_background_down)
+            bitmap.Bind(wx.EVT_LEFT_UP, self._on_background_up)
+            bitmap.Bind(wx.EVT_MOTION, self._on_background_motion)
+
+    def _preview_mouse_position(self, event):
+        """Translate bitmap-local mouse coordinates to preview-panel space."""
+        source = event.GetEventObject()
+        point = event.GetPosition()
+        if source is self:
+            return point
+        return self.ScreenToClient(source.ClientToScreen(point))
+
     def bind_movement_binds(self, toggle):
         """Keep dragging monitors separate from dragging the wallpaper."""
         for event_type in (wx.EVT_LEFT_DOWN, wx.EVT_LEFT_UP, wx.EVT_MOTION):
@@ -3855,7 +3876,8 @@ class WallpaperPreviewPanel(wx.Panel):
         if not (self.frame.sld_offx.IsEnabled() and self.frame.sld_offy.IsEnabled()):
             event.Skip()
             return
-        target = self._drag_target(event.GetPosition())
+        point = self._preview_mouse_position(event)
+        target = self._drag_target(point)
         if target is None:
             event.Skip()
             return
@@ -3869,7 +3891,7 @@ class WallpaperPreviewPanel(wx.Panel):
         if not any(overflow):
             event.Skip()
             return
-        self._background_drag = (event.GetPosition(), self.offset, overflow)
+        self._background_drag = (point, self.offset, overflow)
         self.CaptureMouse()
         self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
 
@@ -3878,7 +3900,7 @@ class WallpaperPreviewPanel(wx.Panel):
             event.Skip()
             return
         start, offsets, overflow = self._background_drag
-        point = event.GetPosition()
+        point = self._preview_mouse_position(event)
         moved = (point.x - start.x, point.y - start.y)
         self.frame.on_wallpaper_dragged(pan_offset_for_drag(offsets, moved, overflow))
 
