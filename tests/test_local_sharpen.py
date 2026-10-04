@@ -23,8 +23,13 @@ def test_disabled_cloud_sharpen_works_without_upload(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(cloud_upscale, "_request_remote_upscale", lambda *args: calls.append(args))
     result = cloud_upscale.prepare_cloud_upscaled_image(
-        image, tmp_path / "nonexistent.png", (200, 150),
-        zoom=1.0, enabled=False, cache_root=tmp_path, sharpen=100,
+        image,
+        tmp_path / "nonexistent.png",
+        (200, 150),
+        zoom=1.0,
+        enabled=False,
+        cache_root=tmp_path,
+        sharpen=100,
     )
     assert result is not image
     assert result.tobytes() != image.tobytes()
@@ -34,8 +39,13 @@ def test_disabled_cloud_sharpen_works_without_upload(tmp_path, monkeypatch):
 def test_disabled_cloud_zero_sharpen_returns_original(tmp_path):
     image = edge_image()
     result = cloud_upscale.prepare_cloud_upscaled_image(
-        image, tmp_path / "nonexistent.png", (200, 150),
-        zoom=1.0, enabled=False, cache_root=tmp_path, sharpen=0,
+        image,
+        tmp_path / "nonexistent.png",
+        (200, 150),
+        zoom=1.0,
+        enabled=False,
+        cache_root=tmp_path,
+        sharpen=0,
     )
     assert result is image
 
@@ -45,8 +55,13 @@ def test_enabled_but_not_needed_still_sharpens_locally(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(cloud_upscale, "_request_remote_upscale", lambda *args: calls.append(args))
     result = cloud_upscale.prepare_cloud_upscaled_image(
-        image, tmp_path / "nonexistent.png", (40, 30),
-        zoom=1.0, enabled=True, cache_root=tmp_path, sharpen=75,
+        image,
+        tmp_path / "nonexistent.png",
+        (40, 30),
+        zoom=1.0,
+        enabled=True,
+        cache_root=tmp_path,
+        sharpen=75,
     )
     assert result.tobytes() != image.tobytes()
     assert calls == []
@@ -64,8 +79,13 @@ def test_enabled_cloud_failure_falls_back_to_sharpened_original(tmp_path, monkey
 
     monkeypatch.setattr(cloud_upscale, "_request_remote_upscale", offline)
     result = cloud_upscale.prepare_cloud_upscaled_image(
-        image, source, (160, 120), zoom=1.0, enabled=True,
-        cache_root=tmp_path, sharpen=100,
+        image,
+        source,
+        (160, 120),
+        zoom=1.0,
+        enabled=True,
+        cache_root=tmp_path,
+        sharpen=100,
     )
     assert result.tobytes() != image.tobytes()
     assert calls == [True]
@@ -75,9 +95,7 @@ def test_preview_sharpens_original_not_cloud_source():
     gui = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
     tree = ast.parse(gui.read_text(encoding="utf-8"))
     panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
-    render = [
-        node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap"
-    ][-1]
+    render = [node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap"][-1]
     source = ast.unparse(render)
     assert "locally_sharpen(oriented, self.sharpen)" in source
     assert "prepare_cloud_upscaled_image" not in source
@@ -88,8 +106,7 @@ def test_gui_enables_local_sharpen_without_cloud():
     tree = ast.parse(gui.read_text(encoding="utf-8"))
     panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperSettingsPanel")
     method = next(
-        node for node in panel.body
-        if isinstance(node, ast.FunctionDef) and node.name == "_sync_cloud_quality_controls"
+        node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "_sync_cloud_quality_controls"
     )
     source = ast.unparse(method)
     assert "self.ch_cloud_scale.Enable(cloud_enabled)" in source
@@ -111,9 +128,13 @@ def test_real_wallpaper_pipeline_sharpens_when_cloud_off(profile_modules, monkey
     calls = []
     monkeypatch.setattr(cloud_upscale, "_request_remote_upscale", lambda *args: calls.append(args))
     profile = SimpleNamespace(
-        name="sharpen", zoom=1.0, offsets=(0.0, 0.0),
-        cloud_upscale=False, cloud_upscale_scale="auto",
-        cloud_upscale_sharpen=0, next_wallpaper_files=lambda: [str(source)],
+        name="sharpen",
+        zoom=1.0,
+        offsets=(0.0, 0.0),
+        cloud_upscale=False,
+        cloud_upscale_scale="auto",
+        cloud_upscale_sharpen=0,
+        next_wallpaper_files=lambda: [str(source)],
     )
     assert wpproc.span_single_image_simple(profile, force=True) == 0
     output = cache / "sharpen-a.png"
