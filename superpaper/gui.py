@@ -402,6 +402,18 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
         self.sizer_setting_processing = wx.StaticBoxSizer(wx.VERTICAL, self, "Image processing and effects")
         processing_parent = self.sizer_setting_processing.GetStaticBox()
+        self.processing_tab_buttons = {}
+        processing_tabs = wx.BoxSizer(wx.HORIZONTAL)
+        for name in ("Basic", "Cloud AI", "Shaders", "Adjustments"):
+            tab = wx.ToggleButton(processing_parent, label=name)
+            tab.Bind(wx.EVT_TOGGLEBUTTON, lambda event, section=name: self._set_processing_tab(section))
+            processing_tabs.Add(tab, 1, wx.EXPAND | wx.RIGHT, 3)
+            self.processing_tab_buttons[name] = tab
+        self.sizer_setting_processing.Add(processing_tabs, 0, wx.EXPAND | wx.ALL, 5)
+        self.sizer_processing_cloud = wx.BoxSizer(wx.VERTICAL)
+        self.sizer_processing_shaders = wx.BoxSizer(wx.VERTICAL)
+        self.sizer_processing_local = wx.BoxSizer(wx.VERTICAL)
+        self._processing_tab = "Basic"
         self.cb_cloud_upscale = wx.CheckBox(processing_parent, -1, "Cloud AI upscale (uploads images)")
         self.cb_cloud_upscale.SetToolTip(
             "When enabled, small wallpaper images are uploaded to a third-party Hugging Face "
@@ -409,7 +421,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             "Results are cached. Offline/quota failures use local resizing instead."
         )
         self.cb_cloud_upscale.Bind(wx.EVT_CHECKBOX, self._on_cloud_upscale_changed)
-        self.sizer_setting_processing.Add(self.cb_cloud_upscale, 0, wx.ALL, 5)
+        self.sizer_processing_cloud.Add(self.cb_cloud_upscale, 0, wx.ALL, 5)
 
         cloud_grid = wx.FlexGridSizer(2, 3, 5, 5)
         cloud_grid.AddGrowableCol(1, 1)
@@ -438,7 +450,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         cloud_grid.Add(cloud_sharpen_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
         cloud_grid.Add(self.sld_cloud_sharpen, 1, wx.EXPAND)
         cloud_grid.Add(self.st_cloud_sharpen, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        self.sizer_setting_processing.Add(cloud_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        self.sizer_processing_cloud.Add(cloud_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
         self._sync_cloud_quality_controls()
 
         shader_row = wx.FlexGridSizer(1, 3, 5, 5)
@@ -466,9 +478,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.button_import_shaders.Bind(wx.EVT_BUTTON, self._on_import_shaders)
         shader_row.Add(self.button_import_shaders, 0)
-        self.sizer_setting_processing.Add(shader_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        self.sizer_processing_shaders.Add(shader_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
 
-        self.sizer_setting_processing.Add(
+        self.sizer_processing_local.Add(
             wx.StaticText(processing_parent, label="Local image adjustments (no uploads)"),
             0,
             wx.LEFT | wx.TOP | wx.BOTTOM,
@@ -488,7 +500,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             value_label = wx.StaticText(processing_parent, label="0", size=wx.Size(40, -1), style=wx.ALIGN_RIGHT)
             self.studio_tone_labels[name.lower()] = value_label
             tone_grid.Add(value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        self.sizer_setting_processing.Add(tone_grid, 0, wx.EXPAND | wx.ALL, 5)
+        self.sizer_processing_local.Add(tone_grid, 0, wx.EXPAND | wx.ALL, 5)
+        for content in (self.sizer_processing_cloud, self.sizer_processing_shaders, self.sizer_processing_local):
+            self.sizer_setting_processing.Add(content, 0, wx.EXPAND | wx.ALL, 4)
+        # Select the simple view after every control exists. No profile
+        # setting is changed merely by selecting a processing tab.
+        self._set_processing_tab("Basic")
 
         # Small undo button to reset scaling & position to defaults without
         # touching the rest of the profile configuration.
@@ -1677,6 +1694,32 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         ]
         self.ch_local_shader.SetItems(labels)
         self.ch_local_shader.SetSelection(self._shader_names.index(selected))
+
+    def _set_processing_tab(self, name):
+        """Show only the selected, functional image-processing controls."""
+        if name not in self.processing_tab_buttons:
+            return
+        self._processing_tab = name
+        panels = {
+            "Basic": (True, False, True),
+            "Cloud AI": (True, False, False),
+            "Shaders": (False, True, False),
+            "Adjustments": (False, False, True),
+        }
+        cloud, shaders, local = panels[name]
+        for button_name, button in self.processing_tab_buttons.items():
+            selected = name == button_name
+            button.SetValue(selected)
+            button.SetBackgroundColour(wx.Colour(37, 109, 205) if selected else wx.Colour(35, 48, 65))
+            button.SetForegroundColour(wx.Colour(245, 249, 255))
+        self.sizer_setting_processing.Show(self.sizer_processing_cloud, show=cloud, recursive=True)
+        self.sizer_setting_processing.Show(self.sizer_processing_shaders, show=shaders, recursive=True)
+        self.sizer_setting_processing.Show(self.sizer_processing_local, show=local, recursive=True)
+        if hasattr(self, "studio_inspector"):
+            self.sizer_setting_processing.Layout()
+            self.studio_inspector.Layout()
+            self.sizer_main.Layout()
+            self.FitInside()
 
     def _on_studio_tone_changed(self, event):
         tone = tuple(self.studio_tone_controls[key].GetValue() for key in ("brightness", "contrast", "saturation"))
