@@ -1673,9 +1673,7 @@ class TempProfileData:
         if self.selected:
             lines.append("selected=" + ";".join(self.selected))
         if self.paths_array:
-            lines.extend(
-                "display" + str(self.paths_array.index(paths)) + "paths=" + paths for paths in self.paths_array
-            )
+            lines.extend(f"display{index}paths={paths}" for index, paths in enumerate(self.paths_array))
         return "\n".join(lines) + "\n"
 
     def test_save(self, *, current_profile_id: ProfileId | None = None, managed: bool = True):
