@@ -137,3 +137,37 @@ def test_wallpaper_layout_prioritizes_full_width_preview_and_inspector():
     assert "self.studio_sidebar = wx.Panel(self, size=wx.Size(162, -1))" in nav
     switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
     assert "self.studio_inspector.Show(self.studio_workspace_title, show=name != 'Wallpapers')" in switching
+
+
+def test_gallery_never_instantiates_hidden_workspace_cards():
+    refresh = _method("WallpaperSettingsPanel", "_refresh_profile_gallery")
+    assert "self._workspace == 'Profiles'" in refresh
+    assert "self._workspace == 'Wallpapers'" in refresh
+    switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
+    assert "if name in ('Wallpapers', 'Profiles')" in switching
+    assert "self._refresh_profile_gallery()" in switching
+
+
+def test_processing_workspace_restores_selected_tab_visibility():
+    switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
+    assert "self._set_processing_tab(self._processing_tab)" in switching
+    assert "self._studio_refresh_processing_preview()" in switching
+    tabs = _method("WallpaperSettingsPanel", "_set_processing_tab")
+    assert "recursive=True" in tabs
+
+
+def test_live_processing_comparison_is_local_and_updates_with_edits():
+    constructor = _method("WallpaperSettingsPanel", "create_studio_navigation")
+    assert "LIVE LOCAL COMPARISON" in constructor
+    assert "self.studio_processing_bitmap" in constructor
+    render = _method("WallpaperSettingsPanel", "_studio_refresh_processing_preview")
+    assert "self.wpprev_pnl.current_preview_images" in render
+    assert "ImageOps.exif_transpose" in render
+    assert "locally_sharpen(" in render
+    assert "apply_local_adjustments(" in render
+    assert "prepare_cloud_upscaled_image(" not in render
+    assert "apply_image_shader(" not in render
+    sharpen = _method("WallpaperSettingsPanel", "_on_cloud_quality_changed")
+    tone = _method("WallpaperSettingsPanel", "_on_studio_tone_changed")
+    assert "self._studio_refresh_processing_preview()" in sharpen
+    assert "self._studio_refresh_processing_preview()" in tone
