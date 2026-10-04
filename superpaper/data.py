@@ -26,6 +26,7 @@ import superpaper.sp_logging as sp_logging
 import superpaper.sp_paths as sp_paths
 import superpaper.wallpaper_processing as wpproc
 from superpaper.cloud_upscale import normalize_scale_mode, normalize_sharpen
+from superpaper.image_adjustments import normalize_adjustment
 from superpaper.local_shaders import normalize_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.profile_id import ManagedPathError, ProfileId, ProfileIdError, profile_path
@@ -470,6 +471,9 @@ def _validate_profile_syntax(text: str) -> None:
             "align",
             "cloud_upscale",
             "local_shader",
+            "local_brightness",
+            "local_contrast",
+            "local_saturation",
         } or key.startswith("display"):
             if not separator:
                 message = f"Missing '=' after profile setting '{key}'."
@@ -970,6 +974,9 @@ class ProfileData:
         self.cloud_upscale_scale = "auto"
         self.cloud_upscale_sharpen = 0
         self.local_shader = ""
+        self.local_brightness = 0
+        self.local_contrast = 0
+        self.local_saturation = 0
         self.paths_array = []
         self.selected = None
 
@@ -1105,6 +1112,8 @@ class ProfileData:
                         self.cloud_upscale_sharpen = normalize_sharpen(words[1])
                     elif words[0] == "local_shader":
                         self.local_shader = normalize_shader(words[1])
+                    elif words[0] in {"local_brightness", "local_contrast", "local_saturation"}:
+                        setattr(self, words[0], normalize_adjustment(words[1]))
                     elif words[0] == "zoom":
                         try:
                             self.zoom = max(1.0, float(words[1].strip()))
@@ -1520,6 +1529,9 @@ class CLIProfileData(ProfileData):
         self.cloud_upscale_scale = "auto"
         self.cloud_upscale_sharpen = 0
         self.local_shader = ""
+        self.local_brightness = 0
+        self.local_contrast = 0
+        self.local_saturation = 0
         self.manual_offsets = wpproc.NUM_DISPLAYS * [(0, 0)]
 
         if len(files) == 1 and not advanced:
@@ -1573,6 +1585,9 @@ class TempProfileData:
         self.cloud_upscale_scale: str = "auto"
         self.cloud_upscale_sharpen: int = 0
         self.local_shader: str = ""
+        self.local_brightness: int = 0
+        self.local_contrast: int = 0
+        self.local_saturation: int = 0
         self.selected: list | None = None
         self.paths_array = []
 
@@ -1647,6 +1662,10 @@ class TempProfileData:
         shader = normalize_shader(self.local_shader)
         if shader:
             lines.append("local_shader=" + shader)
+        for key in ("local_brightness", "local_contrast", "local_saturation"):
+            amount = normalize_adjustment(getattr(self, key))
+            if amount:
+                lines.append(f"{key}={amount}")
         if self.zoom is not None and self.zoom != 1.0:
             lines.append("zoom=" + str(self.zoom))
         if self.align is not None and tuple(self.align) != (0.0, 0.0):

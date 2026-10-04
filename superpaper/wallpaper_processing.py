@@ -26,6 +26,7 @@ from screeninfo import get_monitors
 import superpaper.perspective as persp
 import superpaper.sp_logging as sp_logging
 from superpaper.cloud_upscale import prepare_cloud_upscaled_image
+from superpaper.image_adjustments import apply_local_adjustments
 from superpaper.local_shaders import apply_image_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import original_frame_box
@@ -1215,6 +1216,12 @@ def span_single_image_simple(profile, force):
         scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
         sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
     )
+    img = apply_local_adjustments(
+        img,
+        brightness=getattr(profile, "local_brightness", 0),
+        contrast=getattr(profile, "local_contrast", 0),
+        saturation=getattr(profile, "local_saturation", 0),
+    )
     img = apply_image_shader(
         img, getattr(profile, "local_shader", ""), canvas_tuple, zoom=profile.zoom, cache_root=TEMP_PATH
     )
@@ -1336,6 +1343,12 @@ def span_single_image_advanced(profile, force):
                 scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
                 sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
             )
+            upscaled = apply_local_adjustments(
+                upscaled,
+                brightness=getattr(profile, "local_brightness", 0),
+                contrast=getattr(profile, "local_contrast", 0),
+                saturation=getattr(profile, "local_saturation", 0),
+            )
             upscaled = apply_image_shader(
                 upscaled,
                 getattr(profile, "local_shader", ""),
@@ -1383,6 +1396,12 @@ def span_single_image_advanced(profile, force):
                 cache_root=TEMP_PATH,
                 scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
                 sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
+            )
+            upscaled = apply_local_adjustments(
+                upscaled,
+                brightness=getattr(profile, "local_brightness", 0),
+                contrast=getattr(profile, "local_contrast", 0),
+                saturation=getattr(profile, "local_saturation", 0),
             )
             upscaled = apply_image_shader(
                 upscaled,
@@ -1464,6 +1483,12 @@ def set_multi_image_wallpaper(profile, force):
             cache_root=TEMP_PATH,
             scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
             sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
+        )
+        upscaled = apply_local_adjustments(
+            upscaled,
+            brightness=getattr(profile, "local_brightness", 0),
+            contrast=getattr(profile, "local_contrast", 0),
+            saturation=getattr(profile, "local_saturation", 0),
         )
         upscaled = apply_image_shader(
             upscaled, getattr(profile, "local_shader", ""), res, zoom=profile.zoom, cache_root=TEMP_PATH

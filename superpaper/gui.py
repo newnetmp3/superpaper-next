@@ -33,6 +33,7 @@ from superpaper.data import (
     save_managed_profile,
 )
 from superpaper.local_shaders import ShaderImportError, available_shaders, import_shader_pack, normalize_shader
+from superpaper.image_adjustments import apply_local_adjustments, normalize_adjustment
 from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import (
     crop_overflow,
@@ -447,6 +448,28 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.button_import_shaders.Bind(wx.EVT_BUTTON, self._on_import_shaders)
         shader_row.Add(self.button_import_shaders, 0)
         self.sizer_setting_processing.Add(shader_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+
+        self.sizer_setting_processing.Add(
+            wx.StaticText(processing_parent, label="Local image adjustments (no uploads)"),
+            0, wx.LEFT | wx.TOP | wx.BOTTOM, 8,
+        )
+        self.studio_tone_controls = {}
+        self.studio_tone_labels = {}
+        tone_grid = wx.FlexGridSizer(3, 3, 6, 6)
+        tone_grid.AddGrowableCol(1, 1)
+        for name in ("Brightness", "Contrast", "Saturation"):
+            tone_grid.Add(
+                wx.StaticText(processing_parent, label=f"{name}:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5
+            )
+            slider = wx.Slider(processing_parent, value=0, minValue=-100, maxValue=100)
+            slider.SetToolTip(f"{name} (-100 to +100). Rendered locally; Cloud AI credits are unaffected.")
+            slider.Bind(wx.EVT_SLIDER, self._on_studio_tone_changed)
+            self.studio_tone_controls[name.lower()] = slider
+            tone_grid.Add(slider, 1, wx.EXPAND)
+            value_label = wx.StaticText(processing_parent, label="0", size=wx.Size(40, -1), style=wx.ALIGN_RIGHT)
+            self.studio_tone_labels[name.lower()] = value_label
+            tone_grid.Add(value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.sizer_setting_processing.Add(tone_grid, 0, wx.EXPAND | wx.ALL, 5)
 
         # Small undo button to reset scaling & position to defaults without
         # touching the rest of the profile configuration.
@@ -1036,6 +1059,14 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sld_cloud_sharpen.SetValue(sharpen)
         self.st_cloud_sharpen.SetLabel(str(sharpen))
         self.wpprev_pnl.sharpen = sharpen
+        tone = tuple(
+            normalize_adjustment(getattr(profile, f"local_{key}", 0))
+            for key in ("brightness", "contrast", "saturation")
+        )
+        for key, level in zip(("brightness", "contrast", "saturation"), tone):
+            self.studio_tone_controls[key].SetValue(level)
+            self.studio_tone_labels[key].SetLabel(str(level))
+        self.wpprev_pnl.tone = tone
         self._sync_cloud_quality_controls()
         self._refresh_local_shader_options(getattr(profile, "local_shader", ""))
 
@@ -1457,6 +1488,17 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         ]
         self.ch_local_shader.SetItems(labels)
         self.ch_local_shader.SetSelection(self._shader_names.index(selected))
+
+    def _on_studio_tone_changed(self, event):
+        tone = tuple(
+            self.studio_tone_controls[key].GetValue()
+            for key in ("brightness", "contrast", "saturation")
+        )
+        for key, value in zip(("brightness", "contrast", "saturation"), tone):
+            self.studio_tone_labels[key].SetLabel(str(value))
+        self.wpprev_pnl.tone = tone
+        self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+        self._update_dirty_state()
 
     def _on_local_shader_changed(self, event):
         """Record the shader selection; GPU work happens during wallpaper render."""
@@ -1922,6 +1964,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         tmp_profile.cloud_upscale = self.cb_cloud_upscale.GetValue()
         tmp_profile.cloud_upscale_scale = UPSCALE_MODES[max(0, self.ch_cloud_scale.GetSelection())]
         tmp_profile.cloud_upscale_sharpen = self.sld_cloud_sharpen.GetValue()
+        tmp_profile.local_brightness = self.studio_tone_controls["brightness"].GetValue()
+        tmp_profile.local_contrast = self.studio_tone_controls["contrast"].GetValue()
+        tmp_profile.local_saturation = self.studio_tone_controls["saturation"].GetValue()
         tmp_profile.local_shader = self._shader_names[max(0, self.ch_local_shader.GetSelection())]
         tmp_profile.slideshow = self.cb_slideshow.GetValue()
         if tmp_profile.slideshow:
@@ -2368,6 +2413,7 @@ class WallpaperPreviewPanel(wx.Panel):
         self.zoom = 1.0
         self.offset = (0.0, 0.0)
         self.sharpen = 0
+        self.tone = (0, 0, 0)
         self.compare_original = False
         self.focus_monitor = 0
         self._last_use_ppi = use_ppi_px
@@ -2663,8 +2709,11 @@ class WallpaperPreviewPanel(wx.Panel):
             with Image.open(fname) as source:
                 oriented = ImageOps.exif_transpose(source)
                 prepared = locally_sharpen(oriented, self.sharpen)
+                prepared = apply_local_adjustments(
+                    prepared, brightness=self.tone[0], contrast=self.tone[1], saturation=self.tone[2]
+                )
                 pil = resize_to_fill(prepared, size, quality="fast", zoom=self.zoom, offset=self.offset)
-                if self.compare_original and self.sharpen:
+                if self.compare_original and (self.sharpen or any(self.tone)):
                     plain = resize_to_fill(oriented, size, quality="fast", zoom=self.zoom, offset=self.offset)
                     half = pil.width // 2
                     pil.paste(plain.crop((0, 0, half, pil.height)), (0, 0))
