@@ -16,7 +16,6 @@ import subprocess
 import sys
 import time
 import traceback
-from operator import itemgetter
 from threading import Lock, Thread, Timer
 from typing import Any
 
@@ -27,9 +26,21 @@ import superpaper.perspective as persp
 import superpaper.sp_logging as sp_logging
 from superpaper.cloud_upscale import prepare_cloud_upscaled_image
 from superpaper.image_adjustments import apply_local_adjustments
+from superpaper.image_framing import resize_to_fill
 from superpaper.local_shaders import apply_image_shader
 from superpaper.message_dialog import show_message_dialog
-from superpaper.preview_geometry import original_frame_box
+from superpaper.monitor_geometry import (
+    compute_canvas,
+    compute_crop_tuples,
+    compute_ppi_corrected_res_array,
+    compute_working_canvas,
+    get_all_centers,
+    get_center,
+    get_horizontal_radius,
+    get_lefttop_from_center,
+    get_rightbottom_from_lefttop,
+    translate_crops,
+)
 from superpaper.sp_paths import CONFIG_PATH, TEMP_PATH
 from superpaper.sp_platform import IS_LINUX, IS_MACOS, IS_WINDOWS, host_spawn_env
 
@@ -910,254 +921,6 @@ def refresh_display_data(*, max_attempts=3, retry_delay=0.25):
     candidate = DisplaySystem(max_attempts=max_attempts, retry_delay=retry_delay, update_globals=False)
     publish_display_system(candidate)
     return candidate
-
-
-def compute_canvas(res_array, offset_array):
-    """Computes the size of the total desktop area from monitor resolutions and offsets."""
-    # Take the subtractions of right-most right - left-most left
-    # and bottom-most bottom - top-most top (=0).
-    leftmost = 0
-    topmost = 0
-    right_edges = []
-    bottom_edges = []
-    for res, off in zip(res_array, offset_array):
-        right_edges.append(off[0] + res[0])
-        bottom_edges.append(off[1] + res[1])
-    # Right-most edge.
-    rightmost = max(right_edges)
-    # Bottom-most edge.
-    bottommost = max(bottom_edges)
-    canvas_size = [rightmost - leftmost, bottommost - topmost]
-    if sp_logging.DEBUG:
-        sp_logging.G_LOGGER.info("Canvas size: %s", canvas_size)
-    return canvas_size
-
-
-def compute_ppi_corrected_res_array(res_array, ppi_list_rel_density):
-    """Return ppi density normalized sizes of the real resolutions."""
-    eff_res_array = []
-    for i in range(len(res_array)):
-        effw = round(res_array[i][0] / ppi_list_rel_density[i])
-        effh = round(res_array[i][1] / ppi_list_rel_density[i])
-        eff_res_array.append((effw, effh))
-    return eff_res_array
-
-
-# resize image to fill given rectangle and do a positioned crop to size.
-# Return output image.
-def resize_to_fill(
-    img,
-    res,
-    quality: str | Image.Resampling = Image.Resampling.LANCZOS,
-    zoom=1.0,
-    offset=(0.0, 0.0),
-    reference_size=None,
-):
-    """Resize image to fill given rectangle and do a positioned crop to size.
-
-    The image is always scaled so that it fully covers the target rectangle
-    ``res`` (no letterboxing). ``zoom`` (>= 1.0) scales the image further in,
-    cropping away more of the source. ``offset`` is an (x, y) pair in the range
-    [-1.0, 1.0] that slides the crop window within the available overflow:
-    0.0 keeps the default centered crop, -1.0 aligns to the left/top edge and
-    +1.0 aligns to the right/bottom edge. The result always fills ``res``.
-
-    If the image was enhanced, pass the oriented original source dimensions as
-    reference_size. The cropped region is then mapped from original-image
-    coordinates into the enhanced image, avoiding different framing after
-    cloud processing.
-    """
-    if quality == "fast":
-        quality = Image.Resampling.HAMMING
-        reducing_gap = 1.5
-    else:
-        quality = Image.Resampling.LANCZOS
-        reducing_gap = None
-
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-
-    # Sanitize positioning parameters.
-    try:
-        zoom = float(zoom)
-    except TypeError, ValueError:
-        zoom = 1.0
-    if zoom < 1.0:
-        zoom = 1.0
-    try:
-        offset_x = min(1.0, max(-1.0, float(offset[0])))
-        offset_y = min(1.0, max(-1.0, float(offset[1])))
-    except TypeError, ValueError, IndexError:
-        offset_x, offset_y = 0.0, 0.0
-
-    image_size = img.size  # returns image (width,height)
-    if reference_size is not None and tuple(reference_size) != tuple(image_size):
-        source_box = original_frame_box(reference_size, res, zoom, (offset_x, offset_y))
-        x_factor = image_size[0] / reference_size[0]
-        y_factor = image_size[1] / reference_size[1]
-        enhanced_box = (
-            source_box[0] * x_factor,
-            source_box[1] * y_factor,
-            source_box[2] * x_factor,
-            source_box[3] * y_factor,
-        )
-        return img.resize(res, resample=quality, box=enhanced_box, reducing_gap=reducing_gap)
-    if image_size == res and zoom == 1.0 and offset_x == 0.0 and offset_y == 0.0:
-        # input image is already of the correct size, no action needed.
-        return img
-
-    # Scale so the image at least covers the target rectangle (cover fit),
-    # then apply the additional user zoom. Using max() of the edge ratios
-    # guarantees coverage regardless of aspect ratios.
-    cover_multiplier = max(res[0] / image_size[0], res[1] / image_size[1])
-    resize_multiplier = cover_multiplier * zoom
-    # Guarantee the scaled image is never smaller than the target on either
-    # edge despite rounding, so the final crop always yields exactly res.
-    new_size = (
-        max(round(resize_multiplier * image_size[0]), res[0]),
-        max(round(resize_multiplier * image_size[1]), res[1]),
-    )
-    img = img.resize(new_size, resample=quality, reducing_gap=reducing_gap)
-
-    extra_width = new_size[0] - res[0]
-    extra_height = new_size[1] - res[1]
-    # offset 0.0 -> centered crop (extra/2); -1.0 -> 0; +1.0 -> extra.
-    left = round(extra_width / 2 * (1 + offset_x))
-    top = round(extra_height / 2 * (1 + offset_y))
-    # Clamp the crop origin so the window stays fully inside the image.
-    left = min(max(left, 0), extra_width)
-    top = min(max(top, 0), extra_height)
-    crop_tuple = (left, top, left + res[0], top + res[1])
-    cropped_res = img.crop(crop_tuple)
-    if cropped_res.size == res:
-        return cropped_res
-    else:
-        sp_logging.G_LOGGER.info("Error: result image not of correct size. crp:%s, res:%s", cropped_res.size, res)
-        return cropped_res
-
-
-def get_center(res):
-    """Computes center point of a resolution rectangle."""
-    return (round(res[0] / 2), round(res[1] / 2))
-
-
-def get_all_centers(resarr_eff, manual_offsets):
-    """Computes center points of given resolution list taking into account their offsets."""
-    centers = []
-    sum_widths = 0
-    # get the vertical pixel distance of the center of the left most display
-    # from the top.
-    center_standard_height = get_center(resarr_eff[0])[1]
-    if len(manual_offsets) < len(resarr_eff):
-        sp_logging.G_LOGGER.info(
-            "get_all_centers: Not enough manual offsets: \
-                                 %s for displays: %s",
-            len(manual_offsets),
-            len(resarr_eff),
-        )
-    else:
-        for i in range(len(resarr_eff)):
-            horiz_radius = get_horizontal_radius(resarr_eff[i])
-            # here take the center height to be the same for all the displays
-            # unless modified with the manual offset
-            center_pos_from_anchor_left_top = (
-                sum_widths + manual_offsets[i][0] + horiz_radius,
-                center_standard_height + manual_offsets[i][1],
-            )
-            centers.append(center_pos_from_anchor_left_top)
-            sum_widths += resarr_eff[i][0]
-    if sp_logging.DEBUG:
-        sp_logging.G_LOGGER.info("centers: %s", centers)
-    return centers
-
-
-def get_lefttop_from_center(center, res):
-    """Compute top left coordinate of a rectangle from its center."""
-    return (center[0] - round(res[0] / 2), center[1] - round(res[1] / 2))
-
-
-def get_rightbottom_from_lefttop(lefttop, res):
-    """Compute right bottom corner of a rectangle from its left top."""
-    return (lefttop[0] + res[0], lefttop[1] + res[1])
-
-
-def get_horizontal_radius(res):
-    """Returns half the width of the input rectangle."""
-    return round(res[0] / 2)
-
-
-def compute_crop_tuples(resolution_array_ppinormalized, manual_offsets):
-    # Assume the centers of the physical displays are aligned on common
-    # horizontal line. If this is not the case one must use the manual
-    # offsets defined in the profile for adjustment (and bezel corrections).
-    # Anchor positions to the top left corner of the left most display. If
-    # its size is scaled up, one will need to adjust the horizontal positions
-    # of all the displays. (This is automatically handled by using the
-    # effective resolution array).
-    # Additionally one must make sure that the highest point of the display
-    # arrangement is at y=0.
-    crop_tuples = []
-    centers = get_all_centers(resolution_array_ppinormalized, manual_offsets)
-    for center, res in zip(centers, resolution_array_ppinormalized):
-        lefttop = get_lefttop_from_center(center, res)
-        rightbottom = get_rightbottom_from_lefttop(lefttop, res)
-        crop_tuples.append(lefttop + rightbottom)
-    # Translate crops so that the highest point is at y=0 -- remember to add
-    # translation to both top and bottom coordinates! Same horizontally.
-    # Left-most edge of the crop tuples.
-    leftmost = min(crop_tuples, key=itemgetter(0))[0]
-    # Top-most edge of the crop tuples.
-    topmost = min(crop_tuples, key=itemgetter(1))[1]
-    if leftmost == 0 and topmost == 0:
-        if sp_logging.DEBUG:
-            sp_logging.G_LOGGER.info("crop_tuples: %s", crop_tuples)
-        return crop_tuples  # [(left, up, right, bottom),...]
-    else:
-        crop_tuples_translated = translate_crops(crop_tuples, (leftmost, topmost))
-        if sp_logging.DEBUG:
-            sp_logging.G_LOGGER.info("crop_tuples_translated: %s", crop_tuples_translated)
-        return crop_tuples_translated  # [(left, up, right, bottom),...]
-
-
-def translate_crops(crop_tuples, translate_tuple):
-    """Translate crop tuples to be over the image are, i.e. left top at (0,0)."""
-    crop_tuples_translated = []
-    for crop_tuple in crop_tuples:
-        crop_tuples_translated.append(
-            (
-                crop_tuple[0] - translate_tuple[0],
-                crop_tuple[1] - translate_tuple[1],
-                crop_tuple[2] - translate_tuple[0],
-                crop_tuple[3] - translate_tuple[1],
-            )
-        )
-    return crop_tuples_translated
-
-
-def compute_working_canvas(crop_tuples, bezels=None):
-    """Computes effective size of the desktop are taking into account PPI/offsets/bezels.
-
-    When ``bezels`` is provided (a list of ``(right, bottom)`` ppi-normalized
-    bezel sizes parallel to ``crop_tuples``), the outer bezels extend the
-    canvas so that the rendered image matches what the GUI preview shows. The
-    preview sizes its canvas with these bezels included, so omitting them here
-    made the applied wallpaper ignore outer bezels.
-    """
-    # Take the subtractions of right-most right - left-most left
-    # and bottom-most bottom - top-most top (=0).
-    leftmost = 0
-    topmost = 0
-    if bezels:
-        # Right-/bottom-most edge including each display's outer bezel.
-        rightmost = max(round(crp[2] + bez[0]) for crp, bez in zip(crop_tuples, bezels))
-        bottommost = max(round(crp[3] + bez[1]) for crp, bez in zip(crop_tuples, bezels))
-    else:
-        # Right-most edge of the crop tuples.
-        rightmost = max(crop_tuples, key=itemgetter(2))[2]
-        # Bottom-most edge of the crop tuples.
-        bottommost = max(crop_tuples, key=itemgetter(3))[3]
-    canvas_size = [rightmost - leftmost, bottommost - topmost]
-    return canvas_size
 
 
 def alternating_outputfile(prof_name):
