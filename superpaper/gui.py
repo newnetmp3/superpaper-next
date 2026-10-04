@@ -202,6 +202,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column = wx.BoxSizer(wx.VERTICAL)
         self.studio_canvas_column.Add(self.sizer_top_half, 0, wx.EXPAND | wx.ALL, 4)
         self.studio_canvas_column.Add(self.studio_preview_tools, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 7)
+        self.studio_canvas_column.Add(self.studio_alignment_tools, 0, wx.EXPAND | wx.ALL, 7)
         self.studio_canvas_column.Add(self.studio_source_tools, 0, wx.EXPAND | wx.ALL, 8)
         self.studio_canvas_column.Add(self.sizer_settings_right, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.studio_canvas_column.Hide(self.sizer_settings_right, recursive=True)
@@ -847,6 +848,24 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_reset_view.Bind(wx.EVT_BUTTON, self.onResetZoom)
         self.studio_preview_tools.Add(self.studio_reset_view, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
 
+        self.studio_alignment_tools = wx.BoxSizer(wx.HORIZONTAL)
+        self.studio_alignment_tools.Add(
+            wx.StaticText(self, label="Alignment"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
+        )
+        for caption, position in (("Left", -100), ("Center", 0), ("Right", 100)):
+            button = wx.Button(self, label=caption, size=wx.Size(66, -1))
+            button.SetToolTip(f"Align the image crop to the {caption.lower()}.")
+            button.Bind(wx.EVT_BUTTON, lambda event, amount=position: self._studio_align_image(amount))
+            self.studio_alignment_tools.Add(button, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
+        self.studio_alignment_tools.AddStretchSpacer()
+        self.studio_alignment_tools.Add(wx.StaticText(self, label="Zoom"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.studio_quick_zoom = wx.Slider(self, value=100, minValue=100, maxValue=400, size=wx.Size(145, -1))
+        self.studio_quick_zoom.SetToolTip("Live zoom; synced with the Image & Placement inspector.")
+        self.studio_quick_zoom.Bind(wx.EVT_SLIDER, self._studio_quick_zoom_changed)
+        self.studio_alignment_tools.Add(self.studio_quick_zoom, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.studio_zoom_label = wx.StaticText(self, label="100%", size=wx.Size(50, -1))
+        self.studio_alignment_tools.Add(self.studio_zoom_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
+
         self.studio_source_tools = wx.BoxSizer(wx.HORIZONTAL)
         self.studio_sources_toggle = wx.Button(self, label="Show image sources")
         self.studio_sources_toggle.Bind(wx.EVT_BUTTON, self._studio_toggle_sources)
@@ -982,6 +1001,19 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         else:
             self.studio_image_name.SetLabel("No image selected")
         self.studio_image_thumbnail.SetBitmap(wx.Bitmap.FromBuffer(300, 103, canvas.tobytes()))
+
+    def _studio_align_image(self, value):
+        """Apply alignment through the existing position and dirty-state logic."""
+        if not self.sld_offx.IsEnabled():
+            return
+        self.sld_offx.SetValue(value)
+        self.onZoomOffsetChange(None)
+
+    def _studio_quick_zoom_changed(self, event):
+        if not self.sld_zoom.IsEnabled():
+            return
+        self.sld_zoom.SetValue(self.studio_quick_zoom.GetValue())
+        self.onZoomOffsetChange(None)
 
     def _studio_toggle_compare(self, event):
         self.wpprev_pnl.compare_original = self.studio_compare.GetValue()
@@ -1203,6 +1235,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.st_offy_val.SetLabel(str(offy_pct))
         self.wpprev_pnl.zoom = profile.zoom
         self.wpprev_pnl.offset = profile.offsets
+        self.studio_quick_zoom.SetValue(round(profile.zoom * 100))
+        self.studio_zoom_label.SetLabel(f"{round(profile.zoom * 100)}%")
         self.cb_cloud_upscale.SetValue(getattr(profile, "cloud_upscale", False))
         scale_mode = normalize_scale_mode(getattr(profile, "cloud_upscale_scale", "auto"))
         self.ch_cloud_scale.SetSelection(UPSCALE_MODES.index(scale_mode))
@@ -1686,6 +1720,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         offx_pct = self.sld_offx.GetValue()
         offy_pct = self.sld_offy.GetValue()
         self.st_zoom_val.SetLabel(f"{zoom_pct}%")
+        self.studio_quick_zoom.SetValue(zoom_pct)
+        self.studio_zoom_label.SetLabel(f"{zoom_pct}%")
         self.st_offx_val.SetLabel(str(offx_pct))
         self.st_offy_val.SetLabel(str(offy_pct))
         self.wpprev_pnl.update_zoom_offset(zoom_pct / 100.0, (offx_pct / 100.0, offy_pct / 100.0))
@@ -1784,6 +1820,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_toggle_children(self.sizer_setting_zoom, enable)
         for sld in (self.sld_zoom, self.sld_offx, self.sld_offy):
             sld.Enable(enable)
+        self.studio_quick_zoom.Enable(enable)
         self._sync_cloud_quality_controls()
 
     def onCheckboxHotkey(self, event):
