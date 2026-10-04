@@ -73,7 +73,15 @@ def test_compare_slider_changes_original_vs_adjusted_boundary():
     assert "self.wpprev_pnl.compare_fraction" in adjust
     panel = _method("WallpaperPreviewPanel", "resize_and_bitmap")
     assert "self.compare_fraction" in panel
-    assert "plain.crop((0, 0, divider, pil.height))" in panel
+    assert "if self.compare_original:" in panel
+    assert "split_local_preview(" in panel
+    feedback = _method("WallpaperSettingsPanel", "_studio_update_compare_feedback")
+    assert "No local edits (both sides match)" in feedback
+    assert "self.studio_compare_state.Show(enabled)" in feedback
+    sharpen = _method("WallpaperSettingsPanel", "_on_cloud_quality_changed")
+    tone = _method("WallpaperSettingsPanel", "_on_studio_tone_changed")
+    assert "self._studio_update_compare_feedback()" in sharpen
+    assert "self._studio_update_compare_feedback()" in tone
 
 
 def test_processing_tabs_use_existing_cloud_shader_and_local_controls():

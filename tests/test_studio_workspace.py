@@ -68,7 +68,7 @@ def test_preview_split_is_local_and_does_not_use_gpu_or_cloud():
     render = [node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap"][-1]
     source = ast.unparse(render)
     assert "self.compare_original" in source
-    assert "plain.crop(" in source
+    assert "split_local_preview(" in source
     assert "apply_local_adjustments(" in source
     assert "prepare_cloud_upscaled_image(" not in source
     assert "apply_image_shader(" not in source
