@@ -184,7 +184,7 @@ def test_right_inspector_contains_real_image_placement_controls():
     assert "self.studio_inspector.Add(self.studio_fit_row" in constructor
     assert "self.sizer_setting_sizers.Add(self.sizer_settings_left" in constructor
     assert "self.studio_image_thumbnail" in sidebar
-    assert "self.studio_change_image.Bind(wx.EVT_BUTTON, self.onBrowsePaths)" in sidebar
+    assert "self.studio_change_image.Bind(wx.EVT_BUTTON, self.onChangeImage)" in sidebar
     assert "self.studio_fit_choice.Bind(wx.EVT_CHOICE, self._studio_fit_changed)" in sidebar
 
 
