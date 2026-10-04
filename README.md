@@ -25,31 +25,35 @@ This fork focuses on KDE Plasma 6 support and improving the wallpaper selection 
 
 ### Wallpaper Studio UI
 
-The native wxPython configuration window now opens in **Wallpaper Studio**,
-with a larger persistent three-monitor preview and a left-side workspace
-navigator. Switching workspaces preserves unsaved changes:
+The **Wallpaper Studio** is a preview-first, three-column native desktop editor
+inspired by the design concept:
 
-- **Wallpapers:** wallpaper sources, span mode, zoom and XY placement.
-- **Displays:** real system display options, bezel/diagonal calibration, and
-  profile-scoped advanced spanning offsets and groups.
-- **Profiles:** a thumbnail gallery of saved profiles, with selection, create,
-  duplicate and delete actions. The usual profile dropdown stays available
-  across every workspace.
-- **Processing:** cloud AI upscaling, optional local Anime4K GLSL shaders,
-  local sharpening and live-adjustable brightness, contrast and saturation.
-  Local adjustments require no Internet access or API credits.
-- **Advanced:** slideshow playback and hotkeys.
+- **Left navigation:** Wallpapers, Displays, Profiles, Processing and Advanced
+  workspaces, with the active section highlighted in blue.
+- **Central monitor canvas:** A large uninterrupted preview that remains visible
+  while editing wallpapers, display geometry and processing effects. Preview
+  monitors have readable labels and resolution badges. Drag a wallpaper to
+  change its position. Use the monitor selector, original/local split comparison
+  and Reset View directly under the canvas.
+- **Right inspector:** In Wallpapers, the **Image & Placement** inspector shows a
+  source-image thumbnail, Change Image action, fit/span selector and the real
+  zoom/horizontal/vertical sliders. Other workspaces use the same inspector
+  location for their existing controls.
+- **Source drawer:** The old full-size wallpaper-path table is **collapsed by
+  default** below the canvas. Click **Show image sources** to manage files,
+  folders or display-specific paths; it no longer crowds out the preview.
+- **Profiles workspace:** The main canvas becomes a thumbnail-based profile
+  gallery with create, duplicate, save, revert and delete actions.
+- **Processing:** Cloud AI, local Anime4K shaders and brightness, contrast,
+  saturation and sharpening controls remain tied to real rendering and saved
+  profiles. Local effects work without consuming cloud credits.
+- **Actions:** Apply and Save Profile at the top, and the existing Save & Apply,
+  Apply and Close controls at the bottom.
 
-Above the workspace, the preview offers **Split original / locally adjusted**
-and **All monitors / Monitor N** views. The split compares the original source
-against your locally adjusted preview; cloud AI enhancement and GLSL shader
-effects are applied to the final wallpaper, rather than simulated in the
-preview. Drag on a monitor image to adjust wallpaper positioning, or use the
-zoom and horizontal/vertical sliders in Wallpapers.
-
-The primary **Save & Apply** action is visible in the header and the bottom
-action bar; **Apply** alone still tests without saving. Existing profile
-settings and wallpaper engine behavior remain compatible with older profiles.
+Workspaces preserve unsaved changes. Existing advanced spanning, bezels,
+perspective, hotkeys and slideshow controls remain available. Cloud AI and
+Vulkan shader effects appear on the applied wallpaper, while the preview
+renders the original image plus locally computed adjustments.
 
 ### Image Scaling & Position
 - **Always fills the screen**: images are cover-fitted so there is never any letterboxing
