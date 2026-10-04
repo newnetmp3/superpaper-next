@@ -306,6 +306,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Hide(self.studio_display_editor, recursive=True)
         self.studio_canvas_column.Add(self.studio_source_tools, 0, wx.EXPAND | wx.ALL, 8)
         self.studio_canvas_column.Add(self.studio_quick_profiles, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 6)
+        self.studio_canvas_column.Add(self.studio_processing_preview, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 12)
+        self.studio_canvas_column.Hide(self.studio_processing_preview, recursive=True)
         self.studio_canvas_column.Add(self.sizer_settings_right, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.studio_canvas_column.Hide(self.sizer_settings_right, recursive=True)
         self.studio_canvas_column.Add(self.sizer_gallery, 1, wx.EXPAND | wx.ALL, 7)
@@ -1041,6 +1043,30 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self._sources_expanded = False
 
+        # A dedicated local before/after image makes real use of the Processing
+        # workspace. Never call the cloud upscaler or Vulkan renderer here.
+        self.studio_processing_preview = wx.BoxSizer(wx.VERTICAL)
+        processing_heading = wx.StaticText(self, label="LIVE LOCAL COMPARISON")
+        processing_heading.SetForegroundColour(wx.Colour(227, 238, 253))
+        self.studio_processing_preview.Add(processing_heading, 0, wx.BOTTOM, 6)
+        comparison_labels = wx.BoxSizer(wx.HORIZONTAL)
+        comparison_labels.Add(wx.StaticText(self, label="Original image"), 1, wx.EXPAND)
+        comparison_labels.Add(wx.StaticText(self, label="After local adjustments"), 1, wx.EXPAND)
+        self.studio_processing_preview.Add(comparison_labels, 0, wx.EXPAND | wx.BOTTOM, 5)
+        blank_comparison = Image.new("RGB", (720, 168), (25, 34, 48))
+        self.studio_processing_bitmap = wx.StaticBitmap(
+            self, bitmap=wx.Bitmap.FromBuffer(720, 168, blank_comparison.tobytes())
+        )
+        self.studio_processing_preview.Add(self.studio_processing_bitmap, 0, wx.LEFT | wx.RIGHT, 4)
+        local_note = wx.StaticText(
+            self,
+            label="Brightness, contrast, saturation and sharpening are previewed locally. "
+            "Cloud AI and GPU shaders render when you Apply.",
+        )
+        local_note.SetForegroundColour(wx.Colour(171, 193, 221))
+        local_note.Wrap(740)
+        self.studio_processing_preview.Add(local_note, 0, wx.EXPAND | wx.TOP, 8)
+
         self.studio_image_card = wx.BoxSizer(wx.VERTICAL)
         self.studio_image_card.Add(wx.StaticText(self, label="IMAGE & PLACEMENT"), 0, wx.EXPAND | wx.BOTTOM, 8)
         empty_image = Image.new("RGB", (266, 94), (25, 33, 44))
@@ -1105,6 +1131,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
         self.studio_canvas_column.Show(self.studio_quick_profiles, show=name == "Wallpapers", recursive=True)
+        self.studio_canvas_column.Show(self.studio_processing_preview, show=name == "Processing", recursive=True)
         self.studio_canvas_column.Show(self.studio_alignment_tools, show=name == "Wallpapers", recursive=True)
         self.sizer_bottom_half.Show(self.sizer_profiles, show=name == "Profiles", recursive=True)
         self.studio_canvas_column.Show(self.studio_display_editor, show=name == "Displays", recursive=True)
@@ -1126,7 +1153,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_subtitle.SetLabel(descriptions[name])
         for key, button in self.studio_navigation.items():
             button.SetSelected(key == name)
-        if name == "Profiles":
+        # Showing the Processing inspector recursively may reveal controls
+        # from inactive sub-tabs. Restore the selected tab's child visibility.
+        if name == "Processing":
+            self._set_processing_tab(self._processing_tab)
+            self._studio_refresh_processing_preview()
+        if name in ("Wallpapers", "Profiles"):
             self._refresh_profile_gallery()
         self.studio_canvas_column.Layout()
         self.studio_inspector.Layout()
@@ -1326,10 +1358,14 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.studio_quick_profile_row.Clear(delete_windows=True)
             filter_text = self.studio_gallery_search.GetValue().strip().lower()
             for index, profile in enumerate(self.list_of_profiles):
-                if not filter_text or filter_text in profile.name.lower():
+                # wx creates newly added child panels visible even if their
+                # containing sizer is currently hidden. Only create cards for
+                # the active workspace, preventing the duplicate quick cards
+                # from leaking into the full Profiles gallery.
+                if self._workspace == "Profiles" and (not filter_text or filter_text in profile.name.lower()):
                     card = self._studio_make_profile_card(self.studio_gallery_scroller, profile, 234, 134)
                     self.studio_gallery_cards.Add(card, 0, wx.ALL, 7)
-                if index < 4:
+                if self._workspace == "Wallpapers" and index < 4:
                     compact = self._studio_make_profile_card(self, profile, 177, 89)
                     self.studio_quick_profile_row.Add(compact, 0, wx.RIGHT, 10)
             self.studio_gallery_scroller.Layout()
@@ -1338,6 +1374,37 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 self.studio_canvas_column.Layout()
         finally:
             self._building_gallery = False
+
+    def _studio_refresh_processing_preview(self):
+        """Live original/adjusted comparison using only local Pillow effects."""
+        if getattr(self, "_workspace", None) != "Processing":
+            return
+        images = self.wpprev_pnl.current_preview_images
+        path = images[0] if images else ""
+        canvas = Image.new("RGB", (720, 168), (25, 34, 48))
+        if path and os.path.isfile(path):
+            try:
+                with Image.open(path) as source:
+                    oriented = ImageOps.exif_transpose(source).convert("RGB")
+                    original = resize_to_fill(
+                        oriented,
+                        (356, 168),
+                        quality="fast",
+                        zoom=self.wpprev_pnl.zoom,
+                        offset=self.wpprev_pnl.offset,
+                    )
+                sharpened = locally_sharpen(original, self.wpprev_pnl.sharpen)
+                after = apply_local_adjustments(
+                    sharpened,
+                    brightness=self.wpprev_pnl.tone[0],
+                    contrast=self.wpprev_pnl.tone[1],
+                    saturation=self.wpprev_pnl.tone[2],
+                )
+                canvas.paste(original.convert("RGB"), (0, 0))
+                canvas.paste(after.convert("RGB"), (364, 0))
+            except (OSError, ValueError, UnidentifiedImageError):
+                pass
+        self.studio_processing_bitmap.SetBitmap(wx.Bitmap.FromBuffer(720, 168, canvas.tobytes()))
 
     def _studio_select_profile(self, name):
         """Use the same profile selection logic as the normal dropdown."""
@@ -1922,6 +1989,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         if value != self.wpprev_pnl.sharpen:
             self.wpprev_pnl.sharpen = value
             self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+        self._studio_refresh_processing_preview()
         self._update_dirty_state()
 
     def _refresh_local_shader_options(self, selected):
@@ -1971,6 +2039,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.studio_tone_labels[key].SetLabel(str(value))
         self.wpprev_pnl.tone = tone
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+        self._studio_refresh_processing_preview()
         self._update_dirty_state()
 
     def _on_local_shader_changed(self, event):
@@ -2012,6 +2081,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.st_offx_val.SetLabel(str(offx_pct))
         self.st_offy_val.SetLabel(str(offy_pct))
         self.wpprev_pnl.update_zoom_offset(zoom_pct / 100.0, (offx_pct / 100.0, offy_pct / 100.0))
+        self._studio_refresh_processing_preview()
         self._update_dirty_state()
 
     def onResize(self, event):
@@ -3398,8 +3468,8 @@ class WallpaperPreviewPanel(wx.Panel):
         self.button_reset = wx.Button(self, label="Reset")
         self.button_cancel = wx.Button(self, label="Cancel")
         self.button_entry = wx.Button(self, label="Exact entry")
-        help_bmp = wx.ArtProvider.GetBitmap(wx.ART_QUESTION, wx.ART_BUTTON, wx.Size(20, 20))
-        self.button_help = wx.BitmapButton(self, bitmap=wx.BitmapBundle(help_bmp), name="butt_help")
+        self.button_help = wx.Button(self, label="?", size=wx.Size(27, 27), name="butt_help")
+        self.button_help.SetToolTip("About monitor preview and positioning")
 
         self.button_config.Bind(wx.EVT_BUTTON, self.onConfigure)
         self.button_save.Bind(wx.EVT_BUTTON, self.onSave)
