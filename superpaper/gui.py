@@ -156,6 +156,36 @@ class StudioActionButton(StudioNavigationButton):
         dc.DrawText(self.label, max(0, (w - text_w) // 2), max(0, (h - text_h) // 2))
 
 
+
+class StudioComparisonPanel(wx.Panel):
+    """Paint a local image comparison at the available workspace width."""
+
+    def __init__(self, parent):
+        super().__init__(parent, style=wx.BORDER_NONE)
+        self.SetMinSize(wx.Size(300, 170))
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self._comparison = None
+        self.Bind(wx.EVT_PAINT, self._paint)
+
+    def SetComparison(self, bitmap):
+        self._comparison = bitmap
+        self.Refresh()
+
+    def _paint(self, event):
+        dc = wx.AutoBufferedPaintDC(self)
+        width, height = self.GetClientSize()
+        dc.SetBackground(wx.Brush(wx.Colour(25, 34, 48)))
+        dc.Clear()
+        if self._comparison is None or width < 1 or height < 1:
+            return
+        source = self._comparison
+        scale = min(width / source.GetWidth(), height / source.GetHeight())
+        display_width = max(1, round(source.GetWidth() * scale))
+        display_height = max(1, round(source.GetHeight() * scale))
+        image = source.ConvertToImage().Scale(display_width, display_height, wx.IMAGE_QUALITY_HIGH)
+        dc.DrawBitmap(image.ConvertToBitmap(), (width - display_width) // 2, (height - display_height) // 2)
+
+
 class ConfigFrame(wx.Frame):
     """Wallpaper configuration dialog frame base class."""
 
@@ -1053,11 +1083,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         comparison_labels.Add(wx.StaticText(self, label="Original image"), 1, wx.EXPAND)
         comparison_labels.Add(wx.StaticText(self, label="After local adjustments"), 1, wx.EXPAND)
         self.studio_processing_preview.Add(comparison_labels, 0, wx.EXPAND | wx.BOTTOM, 5)
-        blank_comparison = Image.new("RGB", (720, 168), (25, 34, 48))
-        self.studio_processing_bitmap = wx.StaticBitmap(
-            self, bitmap=wx.Bitmap.FromBuffer(720, 168, blank_comparison.tobytes())
-        )
-        self.studio_processing_preview.Add(self.studio_processing_bitmap, 0, wx.LEFT | wx.RIGHT, 4)
+        self.studio_processing_bitmap = StudioComparisonPanel(self)
+        self.studio_processing_preview.Add(self.studio_processing_bitmap, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 4)
         local_note = wx.StaticText(
             self,
             label="Brightness, contrast, saturation and sharpening are previewed locally. "
@@ -1404,7 +1431,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 canvas.paste(after.convert("RGB"), (364, 0))
             except (OSError, ValueError, UnidentifiedImageError):
                 pass
-        self.studio_processing_bitmap.SetBitmap(wx.Bitmap.FromBuffer(720, 168, canvas.tobytes()))
+        self.studio_processing_bitmap.SetComparison(wx.Bitmap.FromBuffer(720, 168, canvas.tobytes()))
 
     def _studio_select_profile(self, name):
         """Use the same profile selection logic as the normal dropdown."""
