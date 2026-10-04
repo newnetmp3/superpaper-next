@@ -1643,6 +1643,15 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.wpprev_pnl.toggle_buttons(show_config=self.show_advanced_settings, in_config=False)
         self.studio_fit_choice.SetSelection(self.radiobox_spanmode.GetSelection())
+        # Advanced Span edits a physical PPI/bezel canvas, not the stitched
+        # virtual desktop. Start in the mode that matches those settings;
+        # Desktop layout remains an explicit option in the preview toolbar.
+        self.studio_desktop_layout.SetValue(not self.show_advanced_settings)
+        self.wpprev_pnl.set_desktop_layout(not self.show_advanced_settings and self._workspace != "Displays")
+        # A profile may load while GTK is still assigning the preview its
+        # initial size. Recompute after layout rather than requiring the user
+        # to enter and cancel Positions to trigger a redraw.
+        self.resized = True
         self._studio_refresh_image_card()
 
         # Loaded data is the new clean baseline. Slideshow normalization in
@@ -2183,6 +2192,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.wpprev_pnl.toggle_buttons(show_config=self.show_advanced_settings, in_config=False)
         self.studio_fit_choice.SetSelection(self.radiobox_spanmode.GetSelection())
+        self.studio_desktop_layout.SetValue(not self.show_advanced_settings)
+        self.wpprev_pnl.set_desktop_layout(not self.show_advanced_settings and self._workspace != "Displays")
+        self.resized = True
         self._update_dirty_state()
 
     def onCheckboxSlideshow(self, event):
@@ -3653,8 +3665,11 @@ class WallpaperPreviewPanel(wx.Panel):
 
     def onConfigure(self, evt):
         """Start diplay position config mode."""
+        # Calibration uses physical positions. Remember (do not overwrite) the
+        # user's desktop-vs-physical preview preference for Save/Cancel.
+        self._desktop_layout_before_config = self.desktop_layout_enabled
         self.set_desktop_layout(False)
-        self.frame.studio_desktop_layout.SetValue(False)
+        self.frame.studio_desktop_layout.Disable()
         self.old_ppinorm_offs = self.display_sys.get_ppinorm_offsets()  # back up the offsets
         self.frame.toggle_radio_and_profile_choice(False)
         self.frame.toggle_bezel_buttons(False, False)
@@ -3679,12 +3694,19 @@ class WallpaperPreviewPanel(wx.Panel):
         display_data = self.display_sys.get_disp_list(use_ppi_norm=True)
         # Full redraw of preview with new offset data
         if self.current_preview_images:
-            self.preview_wallpaper(self.current_preview_images, True, False, display_data=display_data)
+            self.preview_wallpaper(
+                self.current_preview_images,
+                True,
+                self.frame.use_multi_image,
+                display_data=display_data,
+                spangroups=self.frame.read_spangroups(True),
+            )
         else:
             self.display_data = display_data
             self.refresh_preview(True)
             self.resize_displays(True)
-            # self.show_staticbmps(True)
+        self.set_desktop_layout(getattr(self, "_desktop_layout_before_config", False))
+        self.frame.studio_desktop_layout.Enable(self.frame._workspace != "Displays")
         self.draggable_shapes = []  # Destroys DragShapes
         self.positions_dragged = False
         self.frame.toggle_radio_and_profile_choice(True)
@@ -3725,9 +3747,12 @@ class WallpaperPreviewPanel(wx.Panel):
         self.display_sys.update_ppinorm_offsets(self.old_ppinorm_offs)
         # redraw preview with restored data
         self.display_data = self.display_sys.get_disp_list(True)
-        self.refresh_preview()
-        self.full_refresh_preview(True, True, False)
-        # self.show_staticbmps(True)
+        self.refresh_preview(True)
+        self.full_refresh_preview(
+            True, True, self.frame.use_multi_image, spangroups=self.frame.read_spangroups(True)
+        )
+        self.set_desktop_layout(getattr(self, "_desktop_layout_before_config", False))
+        self.frame.studio_desktop_layout.Enable(self.frame._workspace != "Displays")
         self.frame.toggle_radio_and_profile_choice(True)
         self.frame.toggle_bezel_buttons(False, True)
         self.positions_dragged = False
