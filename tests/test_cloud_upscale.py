@@ -1,5 +1,8 @@
 """Cloud super-resolution must be opt-in, cached and failure-tolerant."""
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, Lock
+from time import sleep
 from types import SimpleNamespace
 
 from PIL import Image
@@ -47,6 +50,39 @@ def test_cache_reused_across_renamed_profiles(tmp_path, monkeypatch):
     second = cloud_upscale.prepare_cloud_upscaled_image(image, source, (180, 100), **kwargs)
     assert first.size == second.size == (200, 120)
     assert uploads == [2]
+
+
+def test_parallel_renders_share_one_remote_upscale_request(tmp_path, monkeypatch):
+    """Concurrent renders of the same source must not spend two API requests."""
+    source = tmp_path / "source.png"
+    image = _picture()
+    image.save(source)
+    starts = Barrier(2)
+    access = Lock()
+    calls = []
+
+    def fake_request(picture, scale, cache_dir):
+        with access:
+            calls.append(scale)
+        # Hold the cache miss open long enough for the second render to enter.
+        sleep(0.1)
+        output = cache_dir / "remote-output.png"
+        picture.resize((picture.width * scale, picture.height * scale)).save(output)
+        return str(output)
+
+    monkeypatch.setattr(cloud_upscale, "_request_remote_upscale", fake_request)
+
+    def render(_index):
+        starts.wait(timeout=5)
+        return cloud_upscale.prepare_cloud_upscaled_image(
+            image, source, (180, 100), zoom=1, enabled=True, cache_root=tmp_path
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outputs = list(pool.map(render, range(2)))
+
+    assert [result.size for result in outputs] == [(200, 120), (200, 120)]
+    assert calls == [2]
 
 
 def test_offline_or_bad_remote_result_falls_back(tmp_path, monkeypatch):

@@ -12,6 +12,9 @@ import hashlib
 import logging
 import os
 import tempfile
+import threading
+import weakref
+from contextlib import contextmanager
 from pathlib import Path
 
 from PIL import Image, ImageEnhance
@@ -26,6 +29,8 @@ JOB_TIMEOUT_SECONDS = 120
 
 LOGGER = logging.getLogger(__name__)
 UPSCALE_MODES = ("auto", "2", "4", "8")
+_CACHE_MUTEX = threading.Lock()
+_CACHE_REQUEST_LOCKS = weakref.WeakValueDictionary()
 
 
 def normalize_scale_mode(mode):
@@ -75,6 +80,37 @@ def cache_file_for_source(source_path, cache_root, scale):
     identity = f"{os.path.realpath(source_path)}:{stat.st_size}:{stat.st_mtime_ns}:{scale}:{CACHE_VERSION}"
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     return Path(cache_root) / "cloud-upscale" / f"{digest}.png"
+
+
+@contextmanager
+def _upscale_cache_lock(cached):
+    """Serialize misses for the same cloud result across threads and POSIX processes.
+
+    The separate lock file must persist: unlinking it would allow waiting
+    processes to lock different inodes and both submit paid API requests.
+    Weak references avoid retaining a Python mutex for every slideshow image.
+    """
+    key = str(cached)
+    with _CACHE_MUTEX:
+        request_lock = _CACHE_REQUEST_LOCKS.get(key)
+        if request_lock is None:
+            request_lock = threading.Lock()
+            _CACHE_REQUEST_LOCKS[key] = request_lock
+
+    with request_lock:
+        if os.name != "posix":
+            # In-process protection on Windows; POSIX also protects separate
+            # processes using an advisory lock on the same cache key.
+            yield
+            return
+        import fcntl
+
+        with cached.with_suffix(".lock").open("a+b") as lockfile:
+            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lockfile.fileno(), fcntl.LOCK_UN)
 
 
 def _usable_image(filename, original_size):
@@ -145,27 +181,29 @@ def prepare_cloud_upscaled_image(
         return locally_sharpen(image, sharpen)
     try:
         cached = cache_file_for_source(source_path, cache_root, scale)
-        if cached.is_file():
-            enhanced = _usable_image(cached, image.size)
-            if enhanced is not None:
-                return locally_sharpen(enhanced, sharpen)
-            cached.unlink(missing_ok=True)
         cached.parent.mkdir(parents=True, exist_ok=True)
-        remote_file = _request_remote_upscale(image, scale, cached.parent)
-        if remote_file is None:
-            return locally_sharpen(image, sharpen)
-        enhanced = _usable_image(remote_file, image.size)
-        if enhanced is None:
-            return locally_sharpen(image, sharpen)
-        # Persist the *validated* result atomically so later renders and
-        # slideshows do not spend more limited free GPU quota.
-        with tempfile.NamedTemporaryFile(suffix=".png", dir=cached.parent, delete=False) as target:
-            stage = Path(target.name)
-        try:
-            enhanced.save(stage, "PNG")
-            os.replace(stage, cached)
-        finally:
-            stage.unlink(missing_ok=True)
+        with _upscale_cache_lock(cached):
+            # Check *after* acquiring the lock: another renderer may have just
+            # paid for and committed the exact same image while we waited.
+            if cached.is_file():
+                enhanced = _usable_image(cached, image.size)
+                if enhanced is not None:
+                    return locally_sharpen(enhanced, sharpen)
+                cached.unlink(missing_ok=True)
+            remote_file = _request_remote_upscale(image, scale, cached.parent)
+            if remote_file is None:
+                return locally_sharpen(image, sharpen)
+            enhanced = _usable_image(remote_file, image.size)
+            if enhanced is None:
+                return locally_sharpen(image, sharpen)
+            # Persist the validated result before releasing the request lock.
+            with tempfile.NamedTemporaryFile(suffix=".png", dir=cached.parent, delete=False) as target:
+                stage = Path(target.name)
+            try:
+                enhanced.save(stage, "PNG")
+                os.replace(stage, cached)
+            finally:
+                stage.unlink(missing_ok=True)
     except Exception as error:
         LOGGER.warning("Cloud upscale unavailable; using original wallpaper: %s", error)
         return locally_sharpen(image, sharpen)
