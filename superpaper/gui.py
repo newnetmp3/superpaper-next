@@ -1031,9 +1031,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_compare_state.Hide()
         self.studio_compare_row.Add(self.studio_compare_state, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 9)
         self.studio_view_row.AddStretchSpacer()
-        self.studio_view_row.Add(
-            wx.StaticText(self, label="Preview view:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
-        )
+        self.studio_view_row.Add(wx.StaticText(self, label="Preview view:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
         self.studio_desktop_layout = wx.CheckBox(self, label="Desktop layout")
         self.studio_desktop_layout.SetValue(True)
         self.studio_desktop_layout.SetToolTip(
