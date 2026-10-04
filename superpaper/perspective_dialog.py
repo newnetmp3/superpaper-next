@@ -3,6 +3,8 @@
 import os
 import time
 
+import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
+
 import superpaper.perspective as persp
 import superpaper.wallpaper_processing as wpproc
 from superpaper.data import CLIProfileData, GeneralSettingsData
@@ -10,8 +12,6 @@ from superpaper.help_dialog import HelpPopup
 from superpaper.message_dialog import show_message_dialog
 from superpaper.sp_paths import RESOURCES_PATH
 from superpaper.wallpaper_processing import change_wallpaper_job
-
-import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
 
 
 class PerspectiveConfig(wx.Dialog):
