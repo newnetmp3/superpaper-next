@@ -28,8 +28,8 @@ def fit_preview_canvas(canvas_size, work_size):
         raise PreviewGeometryError
 
     scale = min(
-        0.9 * work_size[0] / canvas_size[0],
-        0.9 * work_size[1] / canvas_size[1],
+        0.94 * work_size[0] / canvas_size[0],
+        0.94 * work_size[1] / canvas_size[1],
     )
     width = max(1, round(canvas_size[0] * scale))
     height = max(1, round(canvas_size[1] * scale))
