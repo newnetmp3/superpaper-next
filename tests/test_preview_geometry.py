@@ -43,7 +43,7 @@ def test_canvas_dimensions_are_never_rounded_to_zero(canvas):
 
 def test_canvas_centered_in_preview():
     size, position, _scale = fit_preview_canvas((1920, 1080), (1080, 400))
-    assert size[1] == 360
+    assert size[1] == 376
     assert position[0] >= 0
     assert position[1] >= 0
 
@@ -112,3 +112,15 @@ def test_settings_panel_does_not_scroll_due_to_focus_or_mouse_exit():
 def test_no_wheel_rotation_does_not_move_the_scroll_position():
     """Entering a window without wheel movement must not trigger scrolling."""
     assert wheel_scroll_units(0, 120, 3) == (0, 0.0)
+
+
+def test_preview_uses_nearly_all_available_stage_width_without_stretching():
+    canvas = (7000, 1440)
+    stage = (1050, 265)
+    (width, height), position, scale = fit_preview_canvas(canvas, stage)
+    assert width >= 0.93 * stage[0]
+    assert width <= stage[0]
+    assert height <= stage[1]
+    assert abs(width / height - canvas[0] / canvas[1]) < 0.03
+    assert position[0] >= 0 and position[1] >= 0
+    assert scale > 0

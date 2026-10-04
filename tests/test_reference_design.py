@@ -20,9 +20,9 @@ def _method(class_name, method):
 def test_preview_stage_is_compact_and_not_stretched_to_window_height():
     setup = _method("WallpaperSettingsPanel", "__init__")
     assert "self.studio_canvas_column.Add(self.sizer_top_half, 0," in setup
-    assert "self.wpprev_pnl.SetMaxSize(wx.Size(10000, 365))" in setup
+    assert "self.wpprev_pnl.SetMaxSize(wx.Size(10000, 295))" in setup
     preview = _method("WallpaperPreviewPanel", "__init__")
-    assert "self.preview_size = (1080, 315)" in preview
+    assert "self.preview_size = (1080, 265)" in preview
 
 
 def test_inactive_advanced_controls_are_hidden_recursively():
@@ -90,8 +90,8 @@ def test_processing_tabs_use_existing_cloud_shader_and_local_controls():
 def test_profile_gallery_supports_clickable_cards_and_filtering():
     create = _method("WallpaperSettingsPanel", "create_studio_gallery")
     assert "wx.SearchCtrl" in create
-    assert "self.studio_gallery_cards = wx.WrapSizer(wx.HORIZONTAL)" in create
-    assert "self.studio_quick_profile_row = wx.WrapSizer(wx.HORIZONTAL)" in create
+    assert "self.studio_gallery_cards = wx.WrapSizer(wx.HORIZONTAL, flags=0)" in create
+    assert "self.studio_quick_profile_row = wx.WrapSizer(wx.HORIZONTAL, flags=0)" in create
     refresh = _method("WallpaperSettingsPanel", "_refresh_profile_gallery")
     assert "self._studio_make_profile_card(self.studio_gallery_scroller, profile, 234, 134)" in refresh
     assert "filter_text" in refresh
@@ -119,3 +119,21 @@ def test_wallpaper_uses_preview_and_live_profile_strip_without_duplicate_form_ro
     assert "self.studio_canvas_column.Show(self.studio_quick_profiles" in switching
     assert "self.sizer_bottom_half.Show(self.sizer_profiles" in switching
     assert "name == 'Profiles'" in switching
+
+
+def test_profile_tiles_keep_text_visible_and_do_not_stretch_to_row_width():
+    create = _method("WallpaperSettingsPanel", "create_studio_gallery")
+    assert "wx.WrapSizer(wx.HORIZONTAL, flags=0)" in create
+    card = _method("WallpaperSettingsPanel", "_studio_make_profile_card")
+    assert "card.SetMinSize(wx.Size(width + 18, height + 85))" in card
+    assert "card_sizer.Add(detail" in card
+
+
+def test_wallpaper_layout_prioritizes_full_width_preview_and_inspector():
+    init = _method("WallpaperSettingsPanel", "__init__")
+    assert "self.studio_inspector.SetMinSize(wx.Size(294, -1))" in init
+    assert "self.wpprev_pnl.SetMinSize(wx.Size(450, 265))" in init
+    nav = _method("WallpaperSettingsPanel", "create_studio_navigation")
+    assert "self.studio_sidebar = wx.Panel(self, size=wx.Size(162, -1))" in nav
+    switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
+    assert "self.studio_inspector.Show(self.studio_workspace_title, show=name != 'Wallpapers')" in switching
