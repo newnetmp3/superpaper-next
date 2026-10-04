@@ -4,9 +4,10 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
-from superpaper import cloud_upscale
+from superpaper import cloud_upscale, image_adjustments
 
 
 def edge_image(size=(80, 60)):
@@ -147,3 +148,59 @@ def test_real_wallpaper_pipeline_sharpens_when_cloud_off(profile_modules, monkey
         second = sharper.convert("RGB").tobytes()
     assert first != second
     assert calls == []
+
+
+def test_local_split_is_visible_even_when_adjustments_are_neutral():
+    image = Image.new("RGB", (640, 180), (85, 92, 101))
+    unchanged = image.tobytes()
+    result = image_adjustments.split_local_preview(image, image, 0.5, has_adjustments=False)
+    assert result.size == image.size
+    assert result.getpixel((320, 90)) == (62, 172, 255)
+    assert result.getpixel((100, 90)) == image.getpixel((100, 90))
+    assert result.getpixel((550, 90)) == image.getpixel((550, 90))
+    assert result.tobytes() != unchanged
+    assert image.tobytes() == unchanged
+
+
+def test_moving_split_moves_real_original_vs_adjusted_pixel_boundary():
+    original = Image.new("RGB", (640, 180), (255, 0, 0))
+    adjusted = Image.new("RGB", (640, 180), (0, 255, 0))
+    quarter = image_adjustments.split_local_preview(original, adjusted, 0.25, has_adjustments=True)
+    three_quarters = image_adjustments.split_local_preview(original, adjusted, 0.75, has_adjustments=True)
+    assert quarter.getpixel((100, 90)) == (255, 0, 0)
+    assert quarter.getpixel((300, 90)) == (0, 255, 0)
+    assert quarter.getpixel((160, 90)) == (62, 172, 255)
+    assert three_quarters.getpixel((300, 90)) == (255, 0, 0)
+    assert three_quarters.getpixel((530, 90)) == (0, 255, 0)
+    assert three_quarters.getpixel((480, 90)) == (62, 172, 255)
+    assert original.getpixel((300, 90)) == (255, 0, 0)
+    assert adjusted.getpixel((300, 90)) == (0, 255, 0)
+
+
+@pytest.mark.parametrize("fraction,boundary", [(-0.5, 0), (1.5, 639)])
+def test_compare_fraction_is_safely_clamped(fraction, boundary):
+    image = Image.new("RGB", (640, 180))
+    out = image_adjustments.split_local_preview(image, image, fraction)
+    assert out.getpixel((boundary, 90)) == (62, 172, 255)
+
+
+def test_invalid_comparison_geometry_is_rejected():
+    with pytest.raises(ValueError):
+        image_adjustments.split_local_preview(
+            Image.new("RGB", (20, 20)),
+            Image.new("RGB", (19, 20)),
+            0.5,
+        )
+
+
+def test_preview_comparison_remains_local_even_when_cloud_is_enabled():
+    gui = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    tree = ast.parse(gui.read_text(encoding="utf-8"))
+    panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
+    method = next(node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap")
+    implementation = ast.unparse(method)
+    assert "if self.compare_original:" in implementation
+    assert "split_local_preview(" in implementation
+    assert "has_adjustments=has_adjustments" in implementation
+    assert "prepare_cloud_upscaled_image" not in implementation
+    assert "apply_image_shader" not in implementation
