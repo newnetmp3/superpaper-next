@@ -156,7 +156,6 @@ class StudioActionButton(StudioNavigationButton):
         dc.DrawText(self.label, max(0, (w - text_w) // 2), max(0, (h - text_h) // 2))
 
 
-
 class StudioComparisonPanel(wx.Panel):
     """Paint a local image comparison at the available workspace width."""
 
@@ -1429,7 +1428,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 )
                 canvas.paste(original.convert("RGB"), (0, 0))
                 canvas.paste(after.convert("RGB"), (364, 0))
-            except (OSError, ValueError, UnidentifiedImageError):
+            except OSError, ValueError, UnidentifiedImageError:
                 pass
         self.studio_processing_bitmap.SetComparison(wx.Bitmap.FromBuffer(720, 168, canvas.tobytes()))
 
