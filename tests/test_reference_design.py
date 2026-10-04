@@ -91,7 +91,7 @@ def test_profile_gallery_supports_clickable_cards_and_filtering():
     create = _method("WallpaperSettingsPanel", "create_studio_gallery")
     assert "wx.SearchCtrl" in create
     assert "self.studio_gallery_cards = wx.WrapSizer(wx.HORIZONTAL)" in create
-    assert "self.studio_quick_profile_row = wx.BoxSizer(wx.HORIZONTAL)" in create
+    assert "self.studio_quick_profile_row = wx.WrapSizer(wx.HORIZONTAL)" in create
     refresh = _method("WallpaperSettingsPanel", "_refresh_profile_gallery")
     assert "self._studio_make_profile_card(self.studio_gallery_scroller, profile, 234, 134)" in refresh
     assert "filter_text" in refresh
