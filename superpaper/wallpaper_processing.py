@@ -26,6 +26,7 @@ from screeninfo import get_monitors
 import superpaper.perspective as persp
 import superpaper.sp_logging as sp_logging
 from superpaper.cloud_upscale import prepare_cloud_upscaled_image
+from superpaper.local_shaders import apply_image_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import original_frame_box
 from superpaper.sp_paths import CONFIG_PATH, TEMP_PATH
@@ -1214,6 +1215,9 @@ def span_single_image_simple(profile, force):
         scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
         sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
     )
+    img = apply_image_shader(
+        img, getattr(profile, "local_shader", ""), canvas_tuple, zoom=profile.zoom, cache_root=TEMP_PATH
+    )
     img_resize = resize_to_fill(
         img, canvas_tuple, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
     )
@@ -1332,6 +1336,10 @@ def span_single_image_advanced(profile, force):
                 scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
                 sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
             )
+            upscaled = apply_image_shader(
+                upscaled, getattr(profile, "local_shader", ""), canvas_tuple_proj,
+                zoom=profile.zoom, cache_root=TEMP_PATH,
+            )
             img_workingsize = resize_to_fill(
                 upscaled, canvas_tuple_proj, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
             )
@@ -1372,6 +1380,10 @@ def span_single_image_advanced(profile, force):
                 cache_root=TEMP_PATH,
                 scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
                 sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
+            )
+            upscaled = apply_image_shader(
+                upscaled, getattr(profile, "local_shader", ""), canvas_tuple_eff,
+                zoom=profile.zoom, cache_root=TEMP_PATH,
             )
             img_workingsize = resize_to_fill(
                 upscaled, canvas_tuple_eff, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
@@ -1446,6 +1458,9 @@ def set_multi_image_wallpaper(profile, force):
             cache_root=TEMP_PATH,
             scale_mode=getattr(profile, "cloud_upscale_scale", "auto"),
             sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
+        )
+        upscaled = apply_image_shader(
+            upscaled, getattr(profile, "local_shader", ""), res, zoom=profile.zoom, cache_root=TEMP_PATH
         )
         img_resized.append(
             resize_to_fill(upscaled, res, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size)

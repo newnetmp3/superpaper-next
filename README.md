@@ -52,6 +52,39 @@ machine. A public community Space is not a service with guaranteed uptime,
 confidentiality, or long-term API compatibility. Avoid enabling it for private
 or sensitive pictures. Already-cached outputs may be used while offline.
 
+### Offline Anime4K GLSL image shaders
+
+Superpaper can apply **Anime4K mpv-style GLSL shaders directly to still-image
+wallpapers**, without cloud API calls or downloads of AI model weights.
+Open **Image scaling & position > Local Anime4K shader > Import...** and select
+an Anime4K `.tar.gz`, `.zip`, or individual `.glsl` shader file. The
+importer accepts the accompanying Anime4K pack, safely copies its hooks into
+the Superpaper configuration directory, and lets you select each imported
+shader in the dropdown. You can also reuse shaders already present in your
+local `~/.config/mpv/shaders` directory. Importing a pack is a one-time action.
+
+Rendering uses **FFmpeg with the libplacebo filter and a Vulkan GPU driver**.
+On Arch install the `ffmpeg` package and a suitable Vulkan driver (for AMD,
+normally `vulkan-radeon`). Check support with
+`ffmpeg -hide_banner -h filter=libplacebo`. Selection is saved in each
+wallpaper profile, and the actual effect is applied locally to the rendered
+wallpaper in single, grouped, perspective and per-monitor modes. The original
+source image and cloud AI output cache remain unchanged; local shader results
+are cached separately. Anime4K 2x upscalers use a double-sized working bitmap
+and their original-image placement remains stable.
+
+**The on-screen editor preview keeps the original image**, including zoom,
+crop and local sharpening; it does not simulate the GPU shader. Use
+**Save & Apply** to see the finished shader effect on your desktop. If FFmpeg,
+libplacebo or Vulkan cannot run the shader, the wallpaper still applies with
+the non-shader rendering path. Complex Anime4K CNN hooks may be slower than
+simple shaders, and the filters are optimized for anime/illustration rather
+than photographs. Shader pack files are stored locally; they are not uploaded.
+
+The imported GLSL shader source includes its upstream license headers. These
+files originate from the Anime4K project by bloc97 (MIT-licensed variants and
+public-domain components).
+
 ### Cloud upscale quality settings
 
 The public Real-ESRGAN Space exposes **2×, 4× and 8× image models**. Choose

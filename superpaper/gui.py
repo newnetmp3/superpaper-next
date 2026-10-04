@@ -32,6 +32,7 @@ from superpaper.data import (
     parse_profile_file,
     save_managed_profile,
 )
+from superpaper.local_shaders import ShaderImportError, available_shaders, import_shader_pack, normalize_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import (
     crop_overflow,
@@ -399,6 +400,31 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         cloud_grid.Add(self.st_cloud_sharpen, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
         self.sizer_setting_zoom.Add(cloud_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
         self._sync_cloud_quality_controls()
+
+        shader_row = wx.FlexGridSizer(1, 3, 5, 5)
+        shader_row.AddGrowableCol(1, 1)
+        shader_row.Add(
+            wx.StaticText(statbox_parent_zoom, -1, "Local Anime4K shader:"),
+            0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5,
+        )
+        self.ch_local_shader = wx.Choice(statbox_parent_zoom)
+        self._shader_names = [""]
+        self._refresh_local_shader_options("")
+        self.ch_local_shader.SetToolTip(
+            "Process the final wallpaper locally with an mpv Anime4K GLSL shader. "
+            "Requires FFmpeg with libplacebo and a working Vulkan driver. "
+            "The preview keeps the original image; shader effects appear after Apply."
+        )
+        self.ch_local_shader.Bind(wx.EVT_CHOICE, self._on_local_shader_changed)
+        shader_row.Add(self.ch_local_shader, 1, wx.EXPAND)
+        self.button_import_shaders = wx.Button(statbox_parent_zoom, -1, "Import...")
+        self.button_import_shaders.SetToolTip(
+            "Import an Anime4K shader archive (.tar.gz or .zip) or an individual .glsl file. "
+            "The installed shader files are small and run entirely on your GPU."
+        )
+        self.button_import_shaders.Bind(wx.EVT_BUTTON, self._on_import_shaders)
+        shader_row.Add(self.button_import_shaders, 0)
+        self.sizer_setting_zoom.Add(shader_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
 
         # Small undo button to reset scaling & position to defaults without
         # touching the rest of the profile configuration.
@@ -801,6 +827,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.st_cloud_sharpen.SetLabel(str(sharpen))
         self.wpprev_pnl.sharpen = sharpen
         self._sync_cloud_quality_controls()
+        self._refresh_local_shader_options(getattr(profile, "local_shader", ""))
 
         # Update wallpaper preview from selected profile
         if self.show_advanced_settings:
@@ -1202,6 +1229,49 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.wpprev_pnl.sharpen = value
             self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
         self._update_dirty_state()
+
+    def _refresh_local_shader_options(self, selected):
+        """Show all imported hooks and preserve a missing profile selection."""
+        selected = normalize_shader(selected)
+        names = available_shaders()
+        if selected and selected not in names:
+            names.append(selected)
+        self._shader_names = ["", *sorted(names)]
+        labels = ["None"] + [
+            name.removeprefix("Anime4K_").removesuffix(".glsl").replace("_", " ")
+            + (" (missing)" if name not in available_shaders() else "")
+            for name in self._shader_names[1:]
+        ]
+        self.ch_local_shader.SetItems(labels)
+        self.ch_local_shader.SetSelection(self._shader_names.index(selected))
+
+    def _on_local_shader_changed(self, event):
+        """Record the shader selection; GPU work happens during wallpaper render."""
+        self._update_dirty_state()
+
+    def _on_import_shaders(self, event):
+        with wx.FileDialog(
+            self,
+            "Import local Anime4K shaders",
+            wildcard="Shader packs (*.tar.gz;*.zip;*.glsl)|*.tar.gz;*.zip;*.glsl|All files (*.*)|*.*",
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
+        ) as dialog:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            archive = dialog.GetPath()
+        try:
+            count = import_shader_pack(archive)
+        except (OSError, ValueError, ShaderImportError) as exc:
+            wx.MessageBox(str(exc), "Shader import failed", wx.OK | wx.ICON_ERROR, self)
+            return
+        old_selected = self._shader_names[max(0, self.ch_local_shader.GetSelection())]
+        self._refresh_local_shader_options(old_selected)
+        wx.MessageBox(
+            f"Installed {count} local Anime4K shader files. Choose an effect and Save & Apply.",
+            "Shader pack imported",
+            wx.OK | wx.ICON_INFORMATION,
+            self,
+        )
 
     def onZoomOffsetChange(self, event):
         """Live-update the preview as zoom/position sliders move."""
@@ -1635,6 +1705,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         tmp_profile.cloud_upscale = self.cb_cloud_upscale.GetValue()
         tmp_profile.cloud_upscale_scale = UPSCALE_MODES[max(0, self.ch_cloud_scale.GetSelection())]
         tmp_profile.cloud_upscale_sharpen = self.sld_cloud_sharpen.GetValue()
+        tmp_profile.local_shader = self._shader_names[max(0, self.ch_local_shader.GetSelection())]
         tmp_profile.slideshow = self.cb_slideshow.GetValue()
         if tmp_profile.slideshow:
             delay_text = self.tc_sshow_delay.GetLineText(0)
