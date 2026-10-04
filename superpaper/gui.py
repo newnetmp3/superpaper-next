@@ -108,7 +108,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.expected_source_identity = None
         self.loaded_profile = None
         self.sizer_main = wx.BoxSizer(wx.HORIZONTAL)
-        self.sizer_top_half = wx.BoxSizer(wx.HORIZONTAL)  # wallpaper/monitor preview
+        self.sizer_top_half = wx.BoxSizer(wx.HORIZONTAL)
+        self.SetBackgroundColour(wx.Colour(17, 27, 41))  # wallpaper/monitor preview
         self.sizer_bottom_half = wx.BoxSizer(wx.VERTICAL)  # settings, buttons etc
         # bottom_half: setting sizers
         self.sizer_profiles = wx.BoxSizer(wx.HORIZONTAL)
@@ -148,7 +149,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.display_sys = wpproc.DisplaySystem(update_globals=False)
         # self.wpprev_pnl = WallpaperPreviewPanel(self.frame, self.display_sys)
         self.wpprev_pnl = WallpaperPreviewPanel(self, self.display_sys)
-        self.wpprev_pnl.SetMinSize(wx.Size(620, 280))
+        # A panorama must fill the useful height of the stage instead of
+        # sitting as a thin strip in an oversized black rectangle.
+        self.wpprev_pnl.SetMinSize(wx.Size(620, 315))
+        self.wpprev_pnl.SetMaxSize(wx.Size(10000, 365))
         self.sizer_top_half.Add(self.wpprev_pnl, 1, wx.EXPAND | wx.ALL, 5)
         # self.sizer_top_half.SetMinSize((400,200))
         # self.sizer_top_half.SetMinSize()
@@ -182,7 +186,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_displays.Add(self.radiobox_spanmode, 0, wx.EXPAND | wx.ALL, 5)
         self.sizer_displays.Add(self.system_pane, 0, wx.EXPAND | wx.ALL, 5)
         self.sizer_displays.Add(self.sizer_setting_adv, 0, wx.EXPAND | wx.ALL, 5)
-        self.sizer_displays.Hide(self.sizer_setting_adv)
+        self.sizer_displays.Hide(self.sizer_setting_adv, recursive=True)
         self.sizer_processing = wx.BoxSizer(wx.VERTICAL)
         self.sizer_processing.Add(self.sizer_setting_processing, 0, wx.EXPAND | wx.ALL, 5)
         self.sizer_advanced = wx.BoxSizer(wx.VERTICAL)
@@ -196,18 +200,21 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
         self.studio_editor_row = wx.BoxSizer(wx.HORIZONTAL)
         self.studio_canvas_column = wx.BoxSizer(wx.VERTICAL)
-        self.studio_canvas_column.Add(self.sizer_top_half, 1, wx.EXPAND | wx.ALL, 4)
+        self.studio_canvas_column.Add(self.sizer_top_half, 0, wx.EXPAND | wx.ALL, 4)
         self.studio_canvas_column.Add(self.studio_preview_tools, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 7)
+        self.studio_canvas_column.Add(self.studio_alignment_tools, 0, wx.EXPAND | wx.ALL, 7)
+        self.studio_canvas_column.Add(self.studio_display_editor, 0, wx.EXPAND | wx.ALL, 7)
+        self.studio_canvas_column.Hide(self.studio_display_editor, recursive=True)
         self.studio_canvas_column.Add(self.studio_source_tools, 0, wx.EXPAND | wx.ALL, 8)
         self.studio_canvas_column.Add(self.sizer_settings_right, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
-        self.studio_canvas_column.Hide(self.sizer_settings_right)
+        self.studio_canvas_column.Hide(self.sizer_settings_right, recursive=True)
         self.studio_canvas_column.Add(self.sizer_gallery, 1, wx.EXPAND | wx.ALL, 7)
-        self.studio_canvas_column.Hide(self.sizer_gallery)
+        self.studio_canvas_column.Hide(self.sizer_gallery, recursive=True)
         self.studio_editor_row.Add(self.studio_canvas_column, 1, wx.EXPAND | wx.ALL, 2)
         self.studio_editor_row.Add(wx.StaticLine(self, style=wx.LI_VERTICAL), 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 8)
 
         self.studio_inspector = wx.BoxSizer(wx.VERTICAL)
-        self.studio_inspector.SetMinSize(wx.Size(340, -1))
+        self.studio_inspector.SetMinSize(wx.Size(328, -1))
         self.studio_inspector.Add(self.studio_workspace_title, 0, wx.EXPAND | wx.ALL, 9)
         self.studio_inspector.Add(self.studio_image_card, 0, wx.EXPAND | wx.ALL, 7)
         self.studio_inspector.Add(self.studio_fit_row, 0, wx.EXPAND | wx.ALL, 7)
@@ -397,6 +404,18 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
         self.sizer_setting_processing = wx.StaticBoxSizer(wx.VERTICAL, self, "Image processing and effects")
         processing_parent = self.sizer_setting_processing.GetStaticBox()
+        self.processing_tab_buttons = {}
+        processing_tabs = wx.BoxSizer(wx.HORIZONTAL)
+        for name in ("Basic", "Cloud AI", "Shaders", "Adjustments"):
+            tab = wx.ToggleButton(processing_parent, label=name)
+            tab.Bind(wx.EVT_TOGGLEBUTTON, lambda event, section=name: self._set_processing_tab(section))
+            processing_tabs.Add(tab, 1, wx.EXPAND | wx.RIGHT, 3)
+            self.processing_tab_buttons[name] = tab
+        self.sizer_setting_processing.Add(processing_tabs, 0, wx.EXPAND | wx.ALL, 5)
+        self.sizer_processing_cloud = wx.BoxSizer(wx.VERTICAL)
+        self.sizer_processing_shaders = wx.BoxSizer(wx.VERTICAL)
+        self.sizer_processing_local = wx.BoxSizer(wx.VERTICAL)
+        self._processing_tab = "Basic"
         self.cb_cloud_upscale = wx.CheckBox(processing_parent, -1, "Cloud AI upscale (uploads images)")
         self.cb_cloud_upscale.SetToolTip(
             "When enabled, small wallpaper images are uploaded to a third-party Hugging Face "
@@ -404,9 +423,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             "Results are cached. Offline/quota failures use local resizing instead."
         )
         self.cb_cloud_upscale.Bind(wx.EVT_CHECKBOX, self._on_cloud_upscale_changed)
-        self.sizer_setting_processing.Add(self.cb_cloud_upscale, 0, wx.ALL, 5)
+        self.sizer_processing_cloud.Add(self.cb_cloud_upscale, 0, wx.ALL, 5)
 
-        cloud_grid = wx.FlexGridSizer(2, 3, 5, 5)
+        cloud_grid = wx.FlexGridSizer(1, 3, 5, 5)
         cloud_grid.AddGrowableCol(1, 1)
         cloud_scale_label = wx.StaticText(processing_parent, -1, "AI model:")
         self.ch_cloud_scale = wx.Choice(processing_parent, choices=["Auto (when needed)", "2x", "4x", "8x"])
@@ -430,10 +449,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             "The preview uses the original image; changing sharpness never spends cloud credits."
         )
         self.sld_cloud_sharpen.Bind(wx.EVT_SLIDER, self._on_cloud_quality_changed)
-        cloud_grid.Add(cloud_sharpen_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
-        cloud_grid.Add(self.sld_cloud_sharpen, 1, wx.EXPAND)
-        cloud_grid.Add(self.st_cloud_sharpen, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        self.sizer_setting_processing.Add(cloud_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        self.sizer_processing_cloud.Add(cloud_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
         self._sync_cloud_quality_controls()
 
         shader_row = wx.FlexGridSizer(1, 3, 5, 5)
@@ -461,14 +477,20 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.button_import_shaders.Bind(wx.EVT_BUTTON, self._on_import_shaders)
         shader_row.Add(self.button_import_shaders, 0)
-        self.sizer_setting_processing.Add(shader_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        self.sizer_processing_shaders.Add(shader_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
 
-        self.sizer_setting_processing.Add(
+        self.sizer_processing_local.Add(
             wx.StaticText(processing_parent, label="Local image adjustments (no uploads)"),
             0,
             wx.LEFT | wx.TOP | wx.BOTTOM,
             8,
         )
+        sharpen_grid = wx.FlexGridSizer(1, 3, 5, 5)
+        sharpen_grid.AddGrowableCol(1, 1)
+        sharpen_grid.Add(cloud_sharpen_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
+        sharpen_grid.Add(self.sld_cloud_sharpen, 1, wx.EXPAND)
+        sharpen_grid.Add(self.st_cloud_sharpen, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.sizer_processing_local.Add(sharpen_grid, 0, wx.EXPAND | wx.ALL, 5)
         self.studio_tone_controls = {}
         self.studio_tone_labels = {}
         tone_grid = wx.FlexGridSizer(3, 3, 6, 6)
@@ -483,7 +505,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             value_label = wx.StaticText(processing_parent, label="0", size=wx.Size(40, -1), style=wx.ALIGN_RIGHT)
             self.studio_tone_labels[name.lower()] = value_label
             tone_grid.Add(value_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
-        self.sizer_setting_processing.Add(tone_grid, 0, wx.EXPAND | wx.ALL, 5)
+        self.sizer_processing_local.Add(tone_grid, 0, wx.EXPAND | wx.ALL, 5)
+        for content in (self.sizer_processing_cloud, self.sizer_processing_shaders, self.sizer_processing_local):
+            self.sizer_setting_processing.Add(content, 0, wx.EXPAND | wx.ALL, 4)
+        # Select the simple view after every control exists. No profile
+        # setting is changed merely by selecting a processing tab.
+        self._set_processing_tab("Basic")
 
         # Small undo button to reset scaling & position to defaults without
         # touching the rest of the profile configuration.
@@ -765,7 +792,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_bottom_buttonrow.Hide(self.button_perspectives)
         self.sizer_bottom_buttonrow.Layout()
         self.sizer_bottom_buttonrow.AddStretchSpacer()
-        self.sizer_bottom_buttonrow.Add(self.button_apply, 0, wx.ALL, 5)
+        # Apply is already the primary blue action in the header. The footer
+        # keeps only the explicit save-then-apply action, not a duplicate.
         self.sizer_bottom_buttonrow.Add(self.button_save_apply, 0, wx.ALL, 5)
         self.sizer_bottom_buttonrow.Add(self.button_close, 0, wx.ALL, 5)
 
@@ -793,10 +821,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             button.Bind(wx.EVT_BUTTON, lambda event, workspace=name: self._set_studio_workspace(workspace))
             column.Add(button, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 7)
             self.studio_navigation[name] = button
+        # The old sidebar footer was below the visible frame on shorter
+        # desktops. Keep the navigation compact and surface help in status.
         column.AddStretchSpacer()
-        footer = wx.StaticText(self.studio_sidebar, label="Local-first effects\nCloud AI optional")
-        footer.SetForegroundColour(wx.Colour(190, 201, 220))
-        column.Add(footer, 0, wx.ALL, 14)
         self.studio_sidebar.SetSizer(column)
 
         self.studio_header = wx.BoxSizer(wx.HORIZONTAL)
@@ -805,7 +832,14 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         font.SetPointSize(font.GetPointSize() + 7)
         font.SetWeight(wx.FONTWEIGHT_BOLD)
         title.SetFont(font)
-        self.studio_header.Add(title, 1, wx.ALIGN_CENTER_VERTICAL)
+        title_group = wx.BoxSizer(wx.VERTICAL)
+        title_group.Add(title, 0, wx.BOTTOM, 3)
+        self.studio_subtitle = wx.StaticText(
+            self, label="Choose an image, align your monitors, and preview the result."
+        )
+        self.studio_subtitle.SetForegroundColour(wx.Colour(171, 193, 221))
+        title_group.Add(self.studio_subtitle, 0)
+        self.studio_header.Add(title_group, 1, wx.ALIGN_CENTER_VERTICAL)
         self.studio_save = wx.Button(self, label="Save Profile")
         self.studio_save.Bind(wx.EVT_BUTTON, self.onSave)
         self.studio_header.Add(self.studio_save, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
@@ -814,6 +848,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_apply.SetBackgroundColour(wx.Colour(35, 110, 207))
         self.studio_apply.SetForegroundColour(wx.Colour(255, 255, 255))
         self.studio_header.Add(self.studio_apply, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+        self.studio_apply.SetToolTip("Test wallpaper with unsaved settings. Use Save Profile to persist.")
 
         self.studio_preview_tools = wx.BoxSizer(wx.HORIZONTAL)
         self.studio_compare = wx.CheckBox(self, label="Split original / locally adjusted")
@@ -823,6 +858,11 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.studio_compare.Bind(wx.EVT_CHECKBOX, self._studio_toggle_compare)
         self.studio_preview_tools.Add(self.studio_compare, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.studio_split_slider = wx.Slider(self, value=50, minValue=0, maxValue=100, size=wx.Size(130, -1))
+        self.studio_split_slider.SetToolTip("Move the dividing line between original and locally adjusted preview.")
+        self.studio_split_slider.Enable(False)
+        self.studio_split_slider.Bind(wx.EVT_SLIDER, self._studio_compare_position)
+        self.studio_preview_tools.Add(self.studio_split_slider, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
         self.studio_preview_tools.AddStretchSpacer()
         self.studio_preview_tools.Add(
             wx.StaticText(self, label="Preview view:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
@@ -834,6 +874,56 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_reset_view = wx.Button(self, label="Reset View")
         self.studio_reset_view.Bind(wx.EVT_BUTTON, self.onResetZoom)
         self.studio_preview_tools.Add(self.studio_reset_view, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+
+        self.studio_alignment_tools = wx.BoxSizer(wx.HORIZONTAL)
+        self.studio_alignment_tools.Add(
+            wx.StaticText(self, label="Alignment"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
+        )
+        for caption, position in (("Left", -100), ("Center", 0), ("Right", 100)):
+            button = wx.Button(self, label=caption, size=wx.Size(66, -1))
+            button.SetToolTip(f"Align the image crop to the {caption.lower()}.")
+            button.Bind(wx.EVT_BUTTON, lambda event, amount=position: self._studio_align_image(amount))
+            self.studio_alignment_tools.Add(button, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
+        self.studio_alignment_tools.AddStretchSpacer()
+        self.studio_alignment_tools.Add(wx.StaticText(self, label="Zoom"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.studio_quick_zoom = wx.Slider(self, value=100, minValue=100, maxValue=400, size=wx.Size(145, -1))
+        self.studio_quick_zoom.SetToolTip("Live zoom; synced with the Image & Placement inspector.")
+        self.studio_quick_zoom.Bind(wx.EVT_SLIDER, self._studio_quick_zoom_changed)
+        self.studio_alignment_tools.Add(self.studio_quick_zoom, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.studio_zoom_label = wx.StaticText(self, label="100%", size=wx.Size(50, -1))
+        self.studio_alignment_tools.Add(self.studio_zoom_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
+
+        self.studio_display_editor = wx.BoxSizer(wx.VERTICAL)
+        self.studio_display_editor.Add(
+            wx.StaticText(self, label="DISPLAY LAYOUT - choose a monitor to focus its preview"),
+            0,
+            wx.BOTTOM,
+            9,
+        )
+        tiles = wx.BoxSizer(wx.HORIZONTAL)
+        for index, display in enumerate(self.display_sys.disp_list):
+            width, height = display.resolution
+            tile = wx.Button(self, label=f"Monitor {index + 1}\n{width} x {height}")
+            tile.SetMinSize(wx.Size(148, 77))
+            tile.SetBackgroundColour(wx.Colour(27, 50, 77))
+            tile.SetForegroundColour(wx.Colour(238, 245, 255))
+            tile.Bind(wx.EVT_BUTTON, lambda event, number=index + 1: self._studio_focus_display(number))
+            tiles.Add(tile, 1, wx.EXPAND | wx.RIGHT, 7)
+        self.studio_display_editor.Add(tiles, 0, wx.EXPAND | wx.BOTTOM, 10)
+        arrange = wx.Button(self, label="Arrange monitors in preview...")
+        arrange.SetToolTip("Drag monitors to their real positions; use the preview's Save control to stage offsets.")
+        arrange.Bind(wx.EVT_BUTTON, self._studio_arrange_displays)
+        self.studio_display_editor.Add(arrange, 0, wx.ALIGN_LEFT)
+        self.studio_display_editor.Add(
+            wx.StaticText(
+                self,
+                label="Drag the monitors in the preview, then Save there. "
+                "Use the Displays system settings to persist calibration.",
+            ),
+            0,
+            wx.TOP,
+            9,
+        )
 
         self.studio_source_tools = wx.BoxSizer(wx.HORIZONTAL)
         self.studio_sources_toggle = wx.Button(self, label="Show image sources")
@@ -899,14 +989,24 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             return
         self._workspace = name
         for key, section in self._workspace_sizers.items():
-            self.studio_inspector.Show(section, show=key == name)
-        self.studio_inspector.Show(self.studio_image_card, show=name == "Wallpapers")
-        self.studio_inspector.Show(self.studio_fit_row, show=name == "Wallpapers")
+            # wx hides a nested sizer's layout item but may leave its controls
+            # visible unless recursive=True. This was the advanced settings
+            # leaking into the Wallpaper inspector.
+            self.studio_inspector.Show(section, show=key == name, recursive=True)
+        self.studio_inspector.Show(self.studio_image_card, show=name == "Wallpapers", recursive=True)
+        self.studio_inspector.Show(self.studio_fit_row, show=name == "Wallpapers", recursive=True)
+        self.sizer_displays.Show(
+            self.sizer_setting_adv, show=name == "Displays" and self.show_advanced_settings, recursive=True
+        )
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
-        self.studio_canvas_column.Show(self.sizer_settings_right, show=name == "Wallpapers" and self._sources_expanded)
-        self.studio_canvas_column.Show(self.sizer_gallery, show=name == "Profiles")
+        self.studio_canvas_column.Show(self.studio_alignment_tools, show=name == "Wallpapers", recursive=True)
+        self.studio_canvas_column.Show(self.studio_display_editor, show=name == "Displays", recursive=True)
+        self.studio_canvas_column.Show(
+            self.sizer_settings_right, show=name == "Wallpapers" and self._sources_expanded, recursive=True
+        )
+        self.studio_canvas_column.Show(self.sizer_gallery, show=name == "Profiles", recursive=True)
         self.studio_workspace_title.SetLabel(name.upper())
         for key, button in self.studio_navigation.items():
             selected = key == name
@@ -966,9 +1066,43 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.studio_image_name.SetLabel("No image selected")
         self.studio_image_thumbnail.SetBitmap(wx.Bitmap.FromBuffer(300, 103, canvas.tobytes()))
 
+    def _studio_focus_display(self, number):
+        self.studio_monitor_choice.SetSelection(number)
+        self._studio_choose_monitor(None)
+
+    def _studio_arrange_displays(self, event):
+        """Use the existing real monitor drag engine, not mockup-only tiles."""
+        if not self.show_advanced_settings:
+            self.studio_fit_choice.SetSelection(1)
+            self._studio_fit_changed(None)
+        if self.show_advanced_settings and not self.wpprev_pnl.config_mode:
+            self.studio_monitor_choice.SetSelection(0)
+            self._studio_choose_monitor(None)
+            self.wpprev_pnl.onConfigure(None)
+            self.studio_status.SetLabel("Drag monitor tiles in the preview; choose Save on the preview when done.")
+
+    def _studio_align_image(self, value):
+        """Apply alignment through the existing position and dirty-state logic."""
+        if not self.sld_offx.IsEnabled():
+            return
+        self.sld_offx.SetValue(value)
+        self.onZoomOffsetChange(None)
+
+    def _studio_quick_zoom_changed(self, event):
+        if not self.sld_zoom.IsEnabled():
+            return
+        self.sld_zoom.SetValue(self.studio_quick_zoom.GetValue())
+        self.onZoomOffsetChange(None)
+
     def _studio_toggle_compare(self, event):
         self.wpprev_pnl.compare_original = self.studio_compare.GetValue()
+        self.studio_split_slider.Enable(self.studio_compare.GetValue())
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+
+    def _studio_compare_position(self, event):
+        self.wpprev_pnl.compare_fraction = self.studio_split_slider.GetValue() / 100.0
+        if self.wpprev_pnl.compare_original:
+            self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
 
     def _refresh_studio_monitor_options(self):
         count = len(self.display_sys.disp_list)
@@ -983,14 +1117,16 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def create_studio_gallery(self):
         """Profiles are displayed with actual wallpaper thumbnails."""
-        self.sizer_gallery.Add(
-            wx.StaticText(self, label="Saved profiles - select a thumbnail to edit or apply."),
-            0,
-            wx.ALL,
-            5,
-        )
+        gallery_header = wx.BoxSizer(wx.HORIZONTAL)
+        gallery_header.Add(wx.StaticText(self, label="Saved profiles"), 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.studio_gallery_search = wx.SearchCtrl(self, style=wx.TE_PROCESS_ENTER)
+        self.studio_gallery_search.SetDescriptiveText("Search profiles...")
+        self.studio_gallery_search.Bind(wx.EVT_TEXT, self._refresh_profile_gallery)
+        gallery_header.Add(self.studio_gallery_search, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.sizer_gallery.Add(gallery_header, 0, wx.EXPAND | wx.ALL, 5)
         self.gallery_list = wx.ListCtrl(self, style=wx.LC_ICON | wx.LC_SINGLE_SEL)
-        self.gallery_list.SetMinSize(wx.Size(550, 245))
+        self.gallery_list.SetMinSize(wx.Size(550, 345))
+        self.gallery_list.SetBackgroundColour(wx.Colour(20, 30, 45))
         self.gallery_list.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_gallery_selected)
         self.sizer_gallery.Add(self.gallery_list, 1, wx.EXPAND | wx.ALL, 5)
         actions = wx.BoxSizer(wx.HORIZONTAL)
@@ -1010,23 +1146,28 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             return
         self._building_gallery = True
         try:
-            thumbs = wx.ImageList(156, 95)
+            width, height = 234, 134
+            thumbs = wx.ImageList(width, height)
             self.gallery_list.DeleteAllItems()
             self._gallery_profile_names = []
             current = self.tc_name.GetValue()
+            filter_text = self.studio_gallery_search.GetValue().strip().lower()
             for profile in self.list_of_profiles:
-                bitmap = wx.Bitmap.FromRGBA(156, 95, red=29, green=36, blue=46, alpha=255)
+                if filter_text and filter_text not in profile.name.lower():
+                    continue
+                bitmap = wx.Bitmap.FromRGBA(width, height, red=29, green=36, blue=46, alpha=255)
                 images = profile.next_wallpaper_files(peek=True)
                 if images and os.path.isfile(images[0]):
                     try:
                         with Image.open(images[0]) as source:
                             original = ImageOps.exif_transpose(source)
-                            original.thumbnail((156, 95), Image.Resampling.LANCZOS)
-                            canvas = Image.new("RGB", (156, 95), (29, 36, 46))
+                            original.thumbnail((width, height), Image.Resampling.LANCZOS)
+                            canvas = Image.new("RGB", (width, height), (29, 36, 46))
                             canvas.paste(
-                                original.convert("RGB"), ((156 - original.width) // 2, (95 - original.height) // 2)
+                                original.convert("RGB"),
+                                ((width - original.width) // 2, (height - original.height) // 2),
                             )
-                            bitmap = wx.Bitmap.FromBuffer(156, 95, canvas.tobytes())
+                            bitmap = wx.Bitmap.FromBuffer(width, height, canvas.tobytes())
                     except OSError, ValueError:
                         pass
                 thumb = thumbs.Add(bitmap)
@@ -1186,6 +1327,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.st_offy_val.SetLabel(str(offy_pct))
         self.wpprev_pnl.zoom = profile.zoom
         self.wpprev_pnl.offset = profile.offsets
+        self.studio_quick_zoom.SetValue(round(profile.zoom * 100))
+        self.studio_zoom_label.SetLabel(f"{round(profile.zoom * 100)}%")
         self.cb_cloud_upscale.SetValue(getattr(profile, "cloud_upscale", False))
         scale_mode = normalize_scale_mode(getattr(profile, "cloud_upscale_scale", "auto"))
         self.ch_cloud_scale.SetSelection(UPSCALE_MODES.index(scale_mode))
@@ -1445,7 +1588,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def show_adv_setting_sizer(self, show_bool):
         """Show/Hide the sizer for advanced spanning settings."""
-        self.sizer_displays.Show(self.sizer_setting_adv, show=show_bool)
+        self.sizer_displays.Show(
+            self.sizer_setting_adv, show=show_bool and getattr(self, "_workspace", "") == "Displays", recursive=True
+        )
         self.toggle_bezel_buttons(enable_config_butt=True)
         # To only reveal sizer sit no frame resize
         self.path_listctrl.InvalidateBestSize()
@@ -1625,6 +1770,32 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.ch_local_shader.SetItems(labels)
         self.ch_local_shader.SetSelection(self._shader_names.index(selected))
 
+    def _set_processing_tab(self, name):
+        """Show only the selected, functional image-processing controls."""
+        if name not in self.processing_tab_buttons:
+            return
+        self._processing_tab = name
+        panels = {
+            "Basic": (True, False, True),
+            "Cloud AI": (True, False, False),
+            "Shaders": (False, True, False),
+            "Adjustments": (False, False, True),
+        }
+        cloud, shaders, local = panels[name]
+        for button_name, button in self.processing_tab_buttons.items():
+            selected = name == button_name
+            button.SetValue(selected)
+            button.SetBackgroundColour(wx.Colour(37, 109, 205) if selected else wx.Colour(35, 48, 65))
+            button.SetForegroundColour(wx.Colour(245, 249, 255))
+        self.sizer_setting_processing.Show(self.sizer_processing_cloud, show=cloud, recursive=True)
+        self.sizer_setting_processing.Show(self.sizer_processing_shaders, show=shaders, recursive=True)
+        self.sizer_setting_processing.Show(self.sizer_processing_local, show=local, recursive=True)
+        if hasattr(self, "studio_inspector"):
+            self.sizer_setting_processing.Layout()
+            self.studio_inspector.Layout()
+            self.sizer_main.Layout()
+            self.FitInside()
+
     def _on_studio_tone_changed(self, event):
         tone = tuple(self.studio_tone_controls[key].GetValue() for key in ("brightness", "contrast", "saturation"))
         for key, value in zip(("brightness", "contrast", "saturation"), tone):
@@ -1667,6 +1838,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         offx_pct = self.sld_offx.GetValue()
         offy_pct = self.sld_offy.GetValue()
         self.st_zoom_val.SetLabel(f"{zoom_pct}%")
+        self.studio_quick_zoom.SetValue(zoom_pct)
+        self.studio_zoom_label.SetLabel(f"{zoom_pct}%")
         self.st_offx_val.SetLabel(str(offx_pct))
         self.st_offy_val.SetLabel(str(offy_pct))
         self.wpprev_pnl.update_zoom_offset(zoom_pct / 100.0, (offx_pct / 100.0, offy_pct / 100.0))
@@ -1765,6 +1938,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_toggle_children(self.sizer_setting_zoom, enable)
         for sld in (self.sld_zoom, self.sld_offx, self.sld_offy):
             sld.Enable(enable)
+        self.studio_quick_zoom.Enable(enable)
         self._sync_cloud_quality_controls()
 
     def onCheckboxHotkey(self, event):
@@ -2347,7 +2521,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self._refresh_local_shader_options("")
         self._sync_cloud_quality_controls()
         self.studio_compare.SetValue(False)
+        self.studio_split_slider.SetValue(50)
+        self.studio_split_slider.Enable(False)
         self.wpprev_pnl.compare_original = False
+        self.wpprev_pnl.compare_fraction = 0.5
         self.studio_monitor_choice.SetSelection(0)
         self.wpprev_pnl.focus_monitor = 0
 
@@ -2538,7 +2715,7 @@ class WallpaperPreviewPanel(wx.Panel):
     """
 
     def __init__(self, parent, display_sys, image_list=None, use_ppi_px=False, use_multi_image=False):
-        self.preview_size = (1080, 400)
+        self.preview_size = (1080, 315)
         wx.Panel.__init__(self, parent, size=wx.Size(*self.preview_size))
         self.frame = parent
 
@@ -2572,6 +2749,7 @@ class WallpaperPreviewPanel(wx.Panel):
         self.sharpen = 0
         self.tone = (0, 0, 0)
         self.compare_original = False
+        self.compare_fraction = 0.5
         self.focus_monitor = 0
         self._last_use_ppi = use_ppi_px
         self._last_use_multi = use_multi_image
@@ -2878,8 +3056,8 @@ class WallpaperPreviewPanel(wx.Panel):
                 pil = resize_to_fill(prepared, size, quality="fast", zoom=self.zoom, offset=self.offset)
                 if self.compare_original and (self.sharpen or any(self.tone)):
                     plain = resize_to_fill(oriented, size, quality="fast", zoom=self.zoom, offset=self.offset)
-                    half = pil.width // 2
-                    pil.paste(plain.crop((0, 0, half, pil.height)), (0, 0))
+                    divider = round(pil.width * self.compare_fraction)
+                    pil.paste(plain.crop((0, 0, divider, pil.height)), (0, 0))
         except OSError, UnidentifiedImageError:
             msg = (
                 f"Opening image '{fname}' failed with PIL.UnidentifiedImageError."

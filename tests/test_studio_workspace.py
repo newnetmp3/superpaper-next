@@ -57,7 +57,7 @@ def test_studio_workspaces_reuse_real_widgets_and_callbacks():
 
 def test_switching_workspace_preserves_edits_and_refits_scroll():
     source = ast.unparse(_method("WallpaperSettingsPanel", "_set_studio_workspace"))
-    assert "self.studio_inspector.Show(section, show=key == name)" in source
+    assert "self.studio_inspector.Show(section, show=key == name, recursive=True)" in source
     assert "self.FitInside()" in source
     assert "self.Scroll(0, 0)" in source
     assert "self.populate_fields(" not in source
@@ -170,7 +170,7 @@ def test_old_profile_defaults_are_neutral(profile_modules, tmp_path):
 def test_wallpaper_sources_are_collapsed_under_preview_by_default():
     constructor = ast.unparse(_method("WallpaperSettingsPanel", "__init__"))
     assert "self.studio_canvas_column.Add(self.sizer_settings_right" in constructor
-    assert "self.studio_canvas_column.Hide(self.sizer_settings_right)" in constructor
+    assert "self.studio_canvas_column.Hide(self.sizer_settings_right, recursive=True)" in constructor
     assert "self.studio_inspector.Add(self.sizer_setting_sizers" not in constructor
     toggle = ast.unparse(_method("WallpaperSettingsPanel", "_studio_toggle_sources"))
     assert "self._sources_expanded = not self._sources_expanded" in toggle

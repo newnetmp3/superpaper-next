@@ -55,6 +55,33 @@ perspective, hotkeys and slideshow controls remain available. Cloud AI and
 Vulkan shader effects appear on the applied wallpaper, while the preview
 renders the original image plus locally computed adjustments.
 
+### Reference-design workspace refinements
+
+Wallpaper Studio follows the six-part concept layout with native wxPython
+controls: left navigation, a shorter central stage sized for multi-monitor
+panoramas, a compact Image & Placement inspector, and dedicated Profiles,
+Displays and Processing workspaces. In the wallpaper toolbar you can select
+left/center/right framing or change zoom; those controls synchronize with
+the inspector and use the real saved position values.
+
+Profiles offers larger wallpaper thumbnail cards and live name search. Displays
+provides monitor-selection tiles and an **Arrange monitors in preview** action,
+which starts Superpaper's existing draggable display-geometry editor. Finish
+and save positioning through the preview's controls and save the global display
+calibration in Displays settings.
+
+Processing has **Basic**, **Cloud AI**, **Shaders** and **Adjustments** tabs,
+all wired to the existing render pipeline. Local sharpening lives alongside
+brightness/contrast/saturation, independent of cloud AI or remote credits.
+In split preview mode, use the slider to move the comparison boundary while
+keeping the original image as the source reference.
+
+Advanced spanning controls are shown only in the Displays workspace. The large
+wallpaper source list stays collapsed until requested, and the footer avoids
+duplicate Apply actions. This is an active native wxPython implementation of
+the design, not a pixel-identical screenshot; individual GTK/KDE themes can
+change native widget appearance.
+
 ### Image Scaling & Position
 - **Always fills the screen**: images are cover-fitted so there is never any letterboxing
 - **Zoom**: zoom further into the image while it keeps filling the display
