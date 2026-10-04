@@ -374,12 +374,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         cloud_grid.AddGrowableCol(1, 1)
         cloud_scale_label = wx.StaticText(statbox_parent_zoom, -1, "AI model:")
         self.ch_cloud_scale = wx.Choice(
-            statbox_parent_zoom, choices=["Auto (when needed)", "2×", "4×", "8×"]
+            statbox_parent_zoom, choices=["Auto (when needed)", "2x", "4x", "8x"]
         )
         self.ch_cloud_scale.SetSelection(0)
         self.ch_cloud_scale.SetToolTip(
-            "Real-ESRGAN supports 2×, 4× and 8× models. Auto upscales only "
-            "when required by display resolution and zoom (up to 4×). "
+            "Real-ESRGAN supports 2x, 4x and 8x models. Auto upscales only "
+            "when required by display resolution and zoom (up to 4x). "
             "Selecting a fixed model can use cloud GPU time even when the image is large. "
             "Returning to a previously used model reuses its cached output."
         )
