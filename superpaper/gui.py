@@ -588,7 +588,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         shader_row = wx.FlexGridSizer(1, 3, 5, 5)
         shader_row.AddGrowableCol(1, 1)
         shader_row.Add(
-            wx.StaticText(processing_parent, -1, "Local Anime4K shader:"),
+            wx.StaticText(processing_parent, -1, "Anime4K preset / effect:"),
             0,
             wx.ALIGN_CENTER_VERTICAL | wx.LEFT,
             5,
@@ -597,9 +597,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self._shader_names = [""]
         self._refresh_local_shader_options("")
         self.ch_local_shader.SetToolTip(
-            "Process the final wallpaper locally with an mpv Anime4K GLSL shader. "
-            "Requires FFmpeg with libplacebo and a working Vulkan driver. "
-            "The preview keeps the original image; shader effects appear after Apply."
+            "Use an ordered Mode A, B or C pipeline from the imported MPV Anime4K pack. "
+            "AutoDownscalePre files are helper stages, not standalone effects. "
+            "Requires FFmpeg/libplacebo and Vulkan. Effects appear after Apply."
         )
         self.ch_local_shader.Bind(wx.EVT_CHOICE, self._on_local_shader_changed)
         shader_row.Add(self.ch_local_shader, 1, wx.EXPAND)
@@ -2053,9 +2053,16 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         if selected and selected not in names:
             names.append(selected)
         self._shader_names = ["", *sorted(names)]
+        installed = set(available_shaders())
         labels = ["None"] + [
             name.removeprefix("Anime4K_").removesuffix(".glsl").replace("_", " ")
-            + (" (missing)" if name not in available_shaders() else "")
+            + (
+                " (pipeline helper - choose Mode A/B/C)"
+                if "AutoDownscalePre" in name
+                else " (missing)"
+                if name not in installed
+                else ""
+            )
             for name in self._shader_names[1:]
         ]
         self.ch_local_shader.SetItems(labels)
@@ -2118,7 +2125,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         old_selected = self._shader_names[max(0, self.ch_local_shader.GetSelection())]
         self._refresh_local_shader_options(old_selected)
         wx.MessageBox(
-            f"Installed {count} local Anime4K shader files. Choose an effect and Save & Apply.",
+            f"Installed {count} MPV Anime4K shader files. Choose an ordered Mode A/B/C preset "
+            "or an individual enhancement, then Save & Apply.",
             "Shader pack imported",
             wx.OK | wx.ICON_INFORMATION,
             self,
