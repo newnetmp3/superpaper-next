@@ -2666,40 +2666,46 @@ class WallpaperPreviewPanel(wx.Panel):
         self.draw_monitor_numbers(use_ppi_px)
 
     def draw_monitor_numbers(self, use_ppi_px):
-        font = wx.Font(24, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
-        font_clr = wx.Colour(60, 60, 60, alpha=wx.ALPHA_OPAQUE)
-
-        for st_bmp in self.preview_img_list:
-            bmp = st_bmp.GetBitmap()
-            dc = wx.MemoryDC(bmp)
-            text = str(self.preview_img_list.index(st_bmp))
-            dc.SetTextForeground(font_clr)
+        """Compact, readable monitor badges rather than oversized grey indices."""
+        font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+        for index, st_bmp in enumerate(self.preview_img_list):
+            bitmap = st_bmp.GetBitmap()
+            if not bitmap.IsOk():
+                continue
+            dc = wx.MemoryDC(bitmap)
+            title = f"Monitor {index + 1}"
             dc.SetFont(font)
-            dc.DrawText(text, 5, 5)
-            del dc
-            st_bmp.SetBitmap(bmp)
-
+            width, _height = dc.GetTextExtent(title)
+            dc.SetPen(wx.Pen(wx.Colour(82, 107, 143)))
+            dc.SetBrush(wx.Brush(wx.Colour(24, 34, 47)))
+            dc.DrawRoundedRectangle(8, 8, width + 22, 27, 5)
+            dc.SetTextForeground(wx.Colour(244, 247, 252))
+            dc.DrawText(title, 18, 13)
+            dc.SelectObject(wx.NullBitmap)
+            st_bmp.SetBitmap(bitmap)
         if use_ppi_px:
             self.draw_monitor_sizes()
 
     def draw_monitor_sizes(self):
-        font = wx.Font(24, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_LIGHT)
-        font_clr = wx.Colour(60, 60, 60, alpha=wx.ALPHA_OPAQUE)
-
-        for st_bmp, img_sz, dsp in zip(self.preview_img_list, self.img_rel_sizes, self.display_sys.disp_list):
-            bmp = st_bmp.GetBitmap()
-            dc = wx.MemoryDC(bmp)
-            text = str(dsp.diagonal_size()[1]) + '"'
-            dc.SetTextForeground(font_clr)
+        """Show actual monitor resolution in small readable text."""
+        font = wx.Font(9, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+        for st_bmp, disp in zip(self.preview_img_list, self.display_sys.disp_list):
+            bitmap = st_bmp.GetBitmap()
+            if not bitmap.IsOk():
+                continue
+            dc = wx.MemoryDC(bitmap)
+            width, _height = bitmap.GetSize()
+            label = f"{disp.resolution[0]} x {disp.resolution[1]}"
             dc.SetFont(font)
-            # bmp_w, bmp_h = dc.GetSize()
-            bmp_w, bmp_h = img_sz
-            text_w, text_h = dc.GetTextExtent(text)
-            pos_w = bmp_w - text_w - 5
-            pos_h = 5
-            dc.DrawText(text, pos_w, pos_h)
-            del dc
-            st_bmp.SetBitmap(bmp)
+            text_width, text_height = dc.GetTextExtent(label)
+            x = max(8, width - text_width - 17)
+            dc.SetPen(wx.TRANSPARENT_PEN)
+            dc.SetBrush(wx.Brush(wx.Colour(24, 34, 47)))
+            dc.DrawRoundedRectangle(x - 6, 8, text_width + 12, text_height + 10, 4)
+            dc.SetTextForeground(wx.Colour(231, 239, 251))
+            dc.DrawText(label, x, 13)
+            dc.SelectObject(wx.NullBitmap)
+            st_bmp.SetBitmap(bitmap)
 
     def refresh_preview(self, use_ppi_px=False, force_refresh=False):
         if not self.preview_area_ready():
