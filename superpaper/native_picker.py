@@ -67,6 +67,7 @@ def pick_kde_paths(
     if result.returncode == 1:
         return []
     if result.returncode != 0:
-        raise NativePickerError(f"KDialog failed with exit code {result.returncode}: {result.stderr.strip()}")
+        error_message = f"KDialog failed with exit code {result.returncode}: {result.stderr.strip()}"
+        raise NativePickerError(error_message)
     paths = [line for line in result.stdout.splitlines() if line]
     return paths if multiple else paths[:1]
