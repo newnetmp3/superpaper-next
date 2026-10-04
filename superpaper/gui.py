@@ -58,6 +58,72 @@ except ImportError:
     sys.exit()
 
 
+class StudioNavigationButton(wx.Control):
+    """Theme-independent sidebar entry, drawn consistently under GTK and KDE."""
+
+    def __init__(self, parent, label, icon):
+        super().__init__(parent, style=wx.BORDER_NONE)
+        self.label = label
+        self.icon = icon
+        self.selected = False
+        self.hovered = False
+        self.SetMinSize(wx.Size(148, 39))
+        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
+        self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        self.Bind(wx.EVT_PAINT, self._paint)
+        self.Bind(wx.EVT_ENTER_WINDOW, self._enter)
+        self.Bind(wx.EVT_LEAVE_WINDOW, self._leave)
+        self.Bind(wx.EVT_LEFT_UP, self._activate)
+        self.Bind(wx.EVT_KEY_DOWN, self._key_down)
+
+    def SetSelected(self, selected):
+        self.selected = selected
+        self.Refresh()
+
+    def _enter(self, event):
+        self.hovered = True
+        self.Refresh()
+
+    def _leave(self, event):
+        self.hovered = False
+        self.Refresh()
+
+    def _activate(self, event):
+        clicked = wx.CommandEvent(wx.wxEVT_BUTTON, self.GetId())
+        clicked.SetEventObject(self)
+        wx.PostEvent(self, clicked)
+
+    def _key_down(self, event):
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_SPACE):
+            self._activate(event)
+        else:
+            event.Skip()
+
+    def _paint(self, event):
+        dc = wx.AutoBufferedPaintDC(self)
+        w, h = self.GetClientSize()
+        dc.SetBackground(wx.Brush(wx.Colour(25, 34, 48)))
+        dc.Clear()
+        background = (
+            wx.Colour(35, 110, 207)
+            if self.selected
+            else wx.Colour(41, 58, 79)
+            if self.hovered
+            else wx.Colour(25, 34, 48)
+        )
+        dc.SetBrush(wx.Brush(background))
+        dc.SetPen(wx.Pen(wx.Colour(61, 136, 234) if self.selected else background))
+        dc.DrawRoundedRectangle(3, 2, max(1, w - 6), max(1, h - 4), 7)
+        dc.SetTextForeground(wx.Colour(247, 250, 255) if self.selected else wx.Colour(206, 219, 235))
+        font = self.GetFont()
+        font.SetWeight(wx.FONTWEIGHT_BOLD if self.selected else wx.FONTWEIGHT_NORMAL)
+        dc.SetFont(font)
+        icon_w, icon_h = dc.GetTextExtent(self.icon)
+        dc.DrawText(self.icon, 15, max(0, (h - icon_h) // 2))
+        _, text_h = dc.GetTextExtent(self.label)
+        dc.DrawText(self.label, max(39, icon_w + 21), max(0, (h - text_h) // 2))
+
+
 class ConfigFrame(wx.Frame):
     """Wallpaper configuration dialog frame base class."""
 
@@ -197,6 +263,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.create_studio_navigation()
         self.sizer_bottom_half.Add(self.studio_header, 0, wx.EXPAND | wx.ALL, 10)
         self.sizer_bottom_half.Add(self.sizer_profiles, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+        self.sizer_bottom_half.Hide(self.sizer_profiles, recursive=True)
 
         self.studio_editor_row = wx.BoxSizer(wx.HORIZONTAL)
         self.studio_canvas_column = wx.BoxSizer(wx.VERTICAL)
@@ -206,6 +273,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Add(self.studio_display_editor, 0, wx.EXPAND | wx.ALL, 7)
         self.studio_canvas_column.Hide(self.studio_display_editor, recursive=True)
         self.studio_canvas_column.Add(self.studio_source_tools, 0, wx.EXPAND | wx.ALL, 8)
+        self.studio_canvas_column.Add(self.studio_quick_profiles, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 12)
         self.studio_canvas_column.Add(self.sizer_settings_right, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.studio_canvas_column.Hide(self.sizer_settings_right, recursive=True)
         self.studio_canvas_column.Add(self.sizer_gallery, 1, wx.EXPAND | wx.ALL, 7)
@@ -258,6 +326,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
         # Record the loaded display-wide settings as the system clean baseline.
         self._set_system_baseline()
+        self._refresh_profile_gallery()
 
         ### End __init__.
 
@@ -799,7 +868,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def create_studio_navigation(self):
         """Persistent navigation, status, and image preview controls."""
-        self.studio_sidebar = wx.Panel(self, size=wx.Size(164, -1))
+        self.studio_sidebar = wx.Panel(self, size=wx.Size(174, -1))
         self.studio_sidebar.SetBackgroundColour(wx.Colour(25, 34, 48))
         column = wx.BoxSizer(wx.VERTICAL)
         heading = wx.StaticText(self.studio_sidebar, label="SUPERPAPER\nNEXT")
@@ -808,7 +877,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         font.SetPointSize(font.GetPointSize() + 4)
         font.SetWeight(wx.FONTWEIGHT_BOLD)
         heading.SetFont(font)
-        column.Add(heading, 0, wx.ALL, 14)
+        column.Add(heading, 0, wx.LEFT | wx.RIGHT | wx.TOP, 16)
+        caption = wx.StaticText(self.studio_sidebar, label="WALLPAPER STUDIO")
+        caption.SetForegroundColour(wx.Colour(121, 161, 212))
+        column.Add(caption, 0, wx.LEFT | wx.TOP | wx.BOTTOM, 16)
         self.studio_navigation = {}
         for name, icon in (
             ("Wallpapers", "▣"),
@@ -817,9 +889,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             ("Processing", "✦"),
             ("Advanced", "⚙"),
         ):
-            button = wx.Button(self.studio_sidebar, label=f"{icon}   {name}")
+            button = StudioNavigationButton(self.studio_sidebar, name, icon)
             button.Bind(wx.EVT_BUTTON, lambda event, workspace=name: self._set_studio_workspace(workspace))
-            column.Add(button, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 7)
+            column.Add(button, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 5)
             self.studio_navigation[name] = button
         # The old sidebar footer was below the visible frame on shorter
         # desktops. Keep the navigation compact and surface help in status.
@@ -827,7 +899,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_sidebar.SetSizer(column)
 
         self.studio_header = wx.BoxSizer(wx.HORIZONTAL)
-        title = wx.StaticText(self, label="Wallpaper Studio")
+        self.studio_header_title = wx.StaticText(self, label="Wallpapers")
+        title = self.studio_header_title
         font = title.GetFont()
         font.SetPointSize(font.GetPointSize() + 7)
         font.SetWeight(wx.FONTWEIGHT_BOLD)
@@ -1001,18 +1074,26 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
+        self.studio_canvas_column.Show(self.studio_quick_profiles, show=name == "Wallpapers", recursive=True)
         self.studio_canvas_column.Show(self.studio_alignment_tools, show=name == "Wallpapers", recursive=True)
+        self.sizer_bottom_half.Show(self.sizer_profiles, show=name == "Profiles", recursive=True)
         self.studio_canvas_column.Show(self.studio_display_editor, show=name == "Displays", recursive=True)
         self.studio_canvas_column.Show(
             self.sizer_settings_right, show=name == "Wallpapers" and self._sources_expanded, recursive=True
         )
         self.studio_canvas_column.Show(self.sizer_gallery, show=name == "Profiles", recursive=True)
         self.studio_workspace_title.SetLabel(name.upper())
+        self.studio_header_title.SetLabel(name)
+        descriptions = {
+            "Wallpapers": "Select an image and adjust how it fits across your monitors.",
+            "Displays": "Arrange screens, correct bezels, and calibrate your setup.",
+            "Profiles": "Choose a saved wallpaper layout or create a new one.",
+            "Processing": "Enhance images with cloud AI or local adjustments.",
+            "Advanced": "Manage slideshows, hotkeys, and advanced options.",
+        }
+        self.studio_subtitle.SetLabel(descriptions[name])
         for key, button in self.studio_navigation.items():
-            selected = key == name
-            button.SetBackgroundColour(wx.Colour(40, 113, 210) if selected else wx.Colour(41, 52, 70))
-            button.SetForegroundColour(wx.Colour(255, 255, 255))
-            button.Refresh()
+            button.SetSelected(key == name)
         if name == "Profiles":
             self._refresh_profile_gallery()
         self.studio_canvas_column.Layout()
@@ -1116,19 +1197,25 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
 
     def create_studio_gallery(self):
-        """Profiles are displayed with actual wallpaper thumbnails."""
+        """Use real clickable thumbnail cards, not the platform's icon-list view."""
         gallery_header = wx.BoxSizer(wx.HORIZONTAL)
-        gallery_header.Add(wx.StaticText(self, label="Saved profiles"), 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        title = wx.StaticText(self, label="SAVED PROFILES")
+        title.SetForegroundColour(wx.Colour(225, 237, 250))
+        gallery_header.Add(title, 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
         self.studio_gallery_search = wx.SearchCtrl(self, style=wx.TE_PROCESS_ENTER)
         self.studio_gallery_search.SetDescriptiveText("Search profiles...")
         self.studio_gallery_search.Bind(wx.EVT_TEXT, self._refresh_profile_gallery)
         gallery_header.Add(self.studio_gallery_search, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
         self.sizer_gallery.Add(gallery_header, 0, wx.EXPAND | wx.ALL, 5)
-        self.gallery_list = wx.ListCtrl(self, style=wx.LC_ICON | wx.LC_SINGLE_SEL)
-        self.gallery_list.SetMinSize(wx.Size(550, 345))
-        self.gallery_list.SetBackgroundColour(wx.Colour(20, 30, 45))
-        self.gallery_list.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_gallery_selected)
-        self.sizer_gallery.Add(self.gallery_list, 1, wx.EXPAND | wx.ALL, 5)
+
+        self.studio_gallery_scroller = wx.ScrolledWindow(self, style=wx.VSCROLL | wx.BORDER_NONE)
+        self.studio_gallery_scroller.SetScrollRate(0, 16)
+        self.studio_gallery_scroller.SetMinSize(wx.Size(550, 365))
+        self.studio_gallery_scroller.SetBackgroundColour(wx.Colour(19, 31, 47))
+        self.studio_gallery_cards = wx.WrapSizer(wx.HORIZONTAL)
+        self.studio_gallery_scroller.SetSizer(self.studio_gallery_cards)
+        self.sizer_gallery.Add(self.studio_gallery_scroller, 1, wx.EXPAND | wx.ALL, 5)
+
         actions = wx.BoxSizer(wx.HORIZONTAL)
         for label, handler in (
             ("New profile", self._studio_new_profile),
@@ -1139,57 +1226,105 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             button.Bind(wx.EVT_BUTTON, handler)
             actions.Add(button, 0, wx.RIGHT, 8)
         self.sizer_gallery.Add(actions, 0, wx.ALL, 5)
+
+        self.studio_quick_profiles = wx.BoxSizer(wx.VERTICAL)
+        quick_header = wx.BoxSizer(wx.HORIZONTAL)
+        quick_title = wx.StaticText(self, label="YOUR PROFILES")
+        quick_title.SetForegroundColour(wx.Colour(226, 238, 250))
+        quick_header.Add(quick_title, 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        all_profiles = wx.Button(self, label="View all profiles")
+        all_profiles.Bind(wx.EVT_BUTTON, lambda event: self._set_studio_workspace("Profiles"))
+        quick_header.Add(all_profiles, 0, wx.RIGHT, 5)
+        self.studio_quick_profiles.Add(quick_header, 0, wx.EXPAND)
+        self.studio_quick_profile_row = wx.BoxSizer(wx.HORIZONTAL)
+        self.studio_quick_profiles.Add(self.studio_quick_profile_row, 0, wx.EXPAND | wx.TOP, 6)
         self._building_gallery = False
 
-    def _refresh_profile_gallery(self):
-        if not hasattr(self, "gallery_list"):
+    def _studio_profile_thumbnail(self, profile, width, height):
+        """Create a centered photo preview without changing the source file."""
+        canvas = Image.new("RGB", (width, height), (25, 34, 48))
+        images = profile.next_wallpaper_files(peek=True)
+        if images and os.path.isfile(images[0]):
+            try:
+                with Image.open(images[0]) as source:
+                    oriented = ImageOps.exif_transpose(source)
+                    oriented.thumbnail((width, height), Image.Resampling.LANCZOS)
+                    canvas.paste(
+                        oriented.convert("RGB"),
+                        ((width - oriented.width) // 2, (height - oriented.height) // 2),
+                    )
+            except (OSError, ValueError):
+                pass
+        return wx.Bitmap.FromBuffer(width, height, canvas.tobytes())
+
+    def _studio_make_profile_card(self, parent, profile, width, height):
+        selected = profile.name == self.tc_name.GetValue()
+        background = wx.Colour(31, 83, 139) if selected else wx.Colour(32, 46, 65)
+        card = wx.Panel(parent, style=wx.BORDER_NONE)
+        card.SetBackgroundColour(background)
+        card.SetMinSize(wx.Size(width + 18, height + 65))
+        card_sizer = wx.BoxSizer(wx.VERTICAL)
+        picture = wx.StaticBitmap(card, bitmap=self._studio_profile_thumbnail(profile, width, height))
+        card_sizer.Add(picture, 0, wx.ALL, 9)
+        name = wx.StaticText(card, label=profile.name)
+        name.SetForegroundColour(wx.Colour(248, 250, 254))
+        title_font = name.GetFont()
+        title_font.SetWeight(wx.FONTWEIGHT_BOLD)
+        name.SetFont(title_font)
+        card_sizer.Add(name, 0, wx.LEFT | wx.RIGHT, 9)
+        mode = "Separate" if profile.spanmode == "multi" else "Span"
+        detail = wx.StaticText(card, label=f"{len(self.display_sys.disp_list)} monitors · {mode}")
+        detail.SetForegroundColour(wx.Colour(176, 196, 220))
+        card_sizer.Add(detail, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.TOP, 9)
+        card.SetSizer(card_sizer)
+        for control in (card, picture, name, detail):
+            control.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+            control.Bind(
+                wx.EVT_LEFT_UP,
+                lambda event, profile_name=profile.name: self._studio_select_profile(profile_name),
+            )
+        return card
+
+    def _refresh_profile_gallery(self, event=None):
+        if not hasattr(self, "studio_gallery_cards") or self._building_gallery:
             return
         self._building_gallery = True
         try:
-            width, height = 234, 134
-            thumbs = wx.ImageList(width, height)
-            self.gallery_list.DeleteAllItems()
-            self._gallery_profile_names = []
-            current = self.tc_name.GetValue()
+            self.studio_gallery_cards.Clear(delete_windows=True)
+            self.studio_quick_profile_row.Clear(delete_windows=True)
             filter_text = self.studio_gallery_search.GetValue().strip().lower()
-            for profile in self.list_of_profiles:
-                if filter_text and filter_text not in profile.name.lower():
-                    continue
-                bitmap = wx.Bitmap.FromRGBA(width, height, red=29, green=36, blue=46, alpha=255)
-                images = profile.next_wallpaper_files(peek=True)
-                if images and os.path.isfile(images[0]):
-                    try:
-                        with Image.open(images[0]) as source:
-                            original = ImageOps.exif_transpose(source)
-                            original.thumbnail((width, height), Image.Resampling.LANCZOS)
-                            canvas = Image.new("RGB", (width, height), (29, 36, 46))
-                            canvas.paste(
-                                original.convert("RGB"),
-                                ((width - original.width) // 2, (height - original.height) // 2),
-                            )
-                            bitmap = wx.Bitmap.FromBuffer(width, height, canvas.tobytes())
-                    except OSError, ValueError:
-                        pass
-                thumb = thumbs.Add(bitmap)
-                row = self.gallery_list.InsertItem(self.gallery_list.GetItemCount(), profile.name, thumb)
-                self._gallery_profile_names.append(profile.name)
-                if profile.name == current:
-                    self.gallery_list.SetItemState(row, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
-            self.gallery_list.AssignImageList(thumbs, wx.IMAGE_LIST_NORMAL)
+            for index, profile in enumerate(self.list_of_profiles):
+                if not filter_text or filter_text in profile.name.lower():
+                    card = self._studio_make_profile_card(self.studio_gallery_scroller, profile, 234, 134)
+                    self.studio_gallery_cards.Add(card, 0, wx.ALL, 7)
+                if index < 4:
+                    compact = self._studio_make_profile_card(self, profile, 177, 89)
+                    self.studio_quick_profile_row.Add(compact, 0, wx.RIGHT, 10)
+            self.studio_gallery_scroller.Layout()
+            self.studio_gallery_scroller.FitInside()
+            if hasattr(self, "studio_canvas_column"):
+                self.studio_canvas_column.Layout()
         finally:
             self._building_gallery = False
 
-    def _on_gallery_selected(self, event):
+    def _studio_select_profile(self, name):
+        """Use the same profile selection logic as the normal dropdown."""
         if self._building_gallery:
             return
-        index = event.GetIndex()
-        if 0 <= index < len(self._gallery_profile_names):
-            name = self._gallery_profile_names[index]
-            profile = self.parent_tray_obj.get_profile_by_name(name)
-            if profile is not None:
-                self.choice_profiles.SetSelection(self.choice_profiles.FindString(name))
-                self.populate_fields(profile)
-                self.studio_status.SetLabel(f"Selected profile: {name}")
+        profile = self.parent_tray_obj.get_profile_by_name(name)
+        if profile is None:
+            return
+        choice = self.choice_profiles.FindString(name)
+        if choice != wx.NOT_FOUND:
+            self.choice_profiles.SetSelection(choice)
+        self.populate_fields(profile)
+        self._refresh_profile_gallery()
+        self.studio_status.SetLabel(f"Selected profile: {name}")
+
+    def _on_gallery_selected(self, event):
+        """Compatibility callback for older profile-selection entry points."""
+        if hasattr(event, "GetString"):
+            self._studio_select_profile(event.GetString())
 
     def _studio_new_profile(self, event):
         self.onCreateNewProfile(None)
