@@ -237,7 +237,10 @@ def test_cloud_checkbox_cannot_push_reset_view_into_processing_inspector():
     assert "self.studio_preview_tools" not in cloud
 
     switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
-    assert "self.studio_canvas_column.Show(self.studio_preview_tools, show=name != 'Profiles', recursive=True)" in switching
+    assert (
+        "self.studio_canvas_column.Show(self.studio_preview_tools, show=name != 'Profiles', recursive=True)"
+        in switching
+    )
     assert "self.studio_compare_row.Show(self.studio_compare_state, show=self.studio_compare.GetValue())" in switching
 
 
