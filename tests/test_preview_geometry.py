@@ -124,3 +124,77 @@ def test_preview_uses_nearly_all_available_stage_width_without_stretching():
     assert abs(width / height - canvas[0] / canvas[1]) < 0.03
     assert position[0] >= 0 and position[1] >= 0
     assert scale > 0
+
+
+def test_bitmap_children_receive_wallpaper_drag_events():
+    """Displayed wx.StaticBitmaps eat mouse events unless bound directly."""
+    source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    preview = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
+
+    def method(name):
+        function = next(node for node in preview.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        return ast.unparse(function)
+
+    constructor = method("__init__")
+    assert "self.bind_background_drag()" in constructor
+    assert "self.bind_wallpaper_bitmap_drag()" in constructor
+
+    child_bindings = method("bind_wallpaper_bitmap_drag")
+    assert "self.st_bmp_canvas" in child_bindings
+    assert "self.preview_img_list" in child_bindings
+    for event_type in ("wx.EVT_LEFT_DOWN", "wx.EVT_LEFT_UP", "wx.EVT_MOTION"):
+        assert f"bitmap.Bind({event_type}," in child_bindings
+
+    down = method("_on_background_down")
+    motion = method("_on_background_motion")
+    assert "self._preview_mouse_position(event)" in down
+    assert "self._preview_mouse_position(event)" in motion
+    assert "self.CaptureMouse()" in down
+    assert "pan_offset_for_drag(" in motion
+
+
+def test_wallpaper_bitmap_drag_coordinates_are_relative_to_parent():
+    """Simulate child-local and parent mouse events without wxPython."""
+    source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    preview = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
+    method = next(
+        node for node in preview.body if isinstance(node, ast.FunctionDef) and node.name == "_preview_mouse_position"
+    )
+    namespace = {}
+    code = compile(ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[])), "<preview-pointer>", "exec")
+    exec(code, namespace)
+    translate = namespace["_preview_mouse_position"]
+
+    class Point:
+        def __init__(self, x, y):
+            self.x, self.y = x, y
+
+    class Bitmap:
+        def ClientToScreen(self, point):
+            return Point(point.x + 220, point.y + 160)
+
+    class Panel:
+        def ScreenToClient(self, point):
+            return Point(point.x - 180, point.y - 120)
+
+    class Event:
+        def __init__(self, source, point):
+            self.source = source
+            self.point = point
+
+        def GetEventObject(self):
+            return self.source
+
+        def GetPosition(self):
+            return self.point
+
+    panel = Panel()
+    child = Bitmap()
+    original = Point(15, 25)
+    mapped = translate(panel, Event(child, original))
+    assert (mapped.x, mapped.y) == (55, 65)
+
+    parent_mapped = translate(panel, Event(panel, original))
+    assert parent_mapped is original
