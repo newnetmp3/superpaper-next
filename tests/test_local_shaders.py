@@ -66,9 +66,7 @@ def test_unselected_or_not_imported_shader_does_not_use_ffmpeg(tmp_path, monkeyp
     calls = []
     monkeypatch.setattr(local_shaders.subprocess, "run", lambda *a, **kw: calls.append(a))
     assert local_shaders.apply_image_shader(image, "", (80, 40), cache_root=tmp_path) is image
-    assert local_shaders.apply_image_shader(
-        image, NAME, (80, 40), shader_root=tmp_path, cache_root=tmp_path
-    ) is image
+    assert local_shaders.apply_image_shader(image, NAME, (80, 40), shader_root=tmp_path, cache_root=tmp_path) is image
     assert not calls
 
 
@@ -112,13 +110,12 @@ def test_shader_failure_returns_original_without_corrupt_cache(tmp_path, monkeyp
     (installed / NAME).write_bytes(HOOK)
     monkeypatch.setattr(local_shaders.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(
-        local_shaders.subprocess, "run",
+        local_shaders.subprocess,
+        "run",
         lambda *a, **kw: SimpleNamespace(returncode=1, stderr="GPU not supported"),
     )
     image = Image.new("RGB", (50, 30), "purple")
-    output = local_shaders.apply_image_shader(
-        image, NAME, (80, 40), shader_root=installed, cache_root=tmp_path
-    )
+    output = local_shaders.apply_image_shader(image, NAME, (80, 40), shader_root=installed, cache_root=tmp_path)
     assert output is image
     assert not list(tmp_path.rglob("*.png"))
 
@@ -160,8 +157,11 @@ def test_real_render_wires_selected_shader_without_cloud(profile_modules, tmp_pa
 
     monkeypatch.setattr(wpproc, "apply_image_shader", fake_shader)
     profile = SimpleNamespace(
-        name="shader-test", zoom=1.25, offsets=(0.2, -0.3),
-        cloud_upscale=False, local_shader=NAME,
+        name="shader-test",
+        zoom=1.25,
+        offsets=(0.2, -0.3),
+        cloud_upscale=False,
+        local_shader=NAME,
         next_wallpaper_files=lambda: [str(source)],
     )
     assert wpproc.span_single_image_simple(profile, force=True) == 0

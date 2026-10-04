@@ -1337,8 +1337,11 @@ def span_single_image_advanced(profile, force):
                 sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
             )
             upscaled = apply_image_shader(
-                upscaled, getattr(profile, "local_shader", ""), canvas_tuple_proj,
-                zoom=profile.zoom, cache_root=TEMP_PATH,
+                upscaled,
+                getattr(profile, "local_shader", ""),
+                canvas_tuple_proj,
+                zoom=profile.zoom,
+                cache_root=TEMP_PATH,
             )
             img_workingsize = resize_to_fill(
                 upscaled, canvas_tuple_proj, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size
@@ -1382,8 +1385,11 @@ def span_single_image_advanced(profile, force):
                 sharpen=getattr(profile, "cloud_upscale_sharpen", 0),
             )
             upscaled = apply_image_shader(
-                upscaled, getattr(profile, "local_shader", ""), canvas_tuple_eff,
-                zoom=profile.zoom, cache_root=TEMP_PATH,
+                upscaled,
+                getattr(profile, "local_shader", ""),
+                canvas_tuple_eff,
+                zoom=profile.zoom,
+                cache_root=TEMP_PATH,
             )
             img_workingsize = resize_to_fill(
                 upscaled, canvas_tuple_eff, zoom=profile.zoom, offset=profile.offsets, reference_size=source_size

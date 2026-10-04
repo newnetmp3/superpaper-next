@@ -77,9 +77,7 @@ def available_shaders(*, shader_root=None):
             choices.update(
                 item.name
                 for item in folder.iterdir()
-                if normalize_shader(item.name)
-                and item.is_file()
-                and item.stat().st_size <= MAX_SHADER_BYTES
+                if normalize_shader(item.name) and item.is_file() and item.stat().st_size <= MAX_SHADER_BYTES
             )
     return sorted(choices)
 
@@ -212,15 +210,28 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
             image.convert("RGB").save(src)
             width, height = dimensions
             graph = (
-                f"format=rgba,hwupload,"
-                f"libplacebo=w={width}:h={height}:custom_shader_path={hook},"
-                "hwdownload,format=rgba"
+                f"format=rgba,hwupload,libplacebo=w={width}:h={height}:custom_shader_path={hook},hwdownload,format=rgba"
             )
             command = [
-                ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-                "-init_hw_device", "vulkan=vk", "-filter_hw_device", "vk",
-                "-i", str(src), "-vf", graph,
-                "-frames:v", "1", "-update", "1", str(output),
+                ffmpeg,
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-init_hw_device",
+                "vulkan=vk",
+                "-filter_hw_device",
+                "vk",
+                "-i",
+                str(src),
+                "-vf",
+                graph,
+                "-frames:v",
+                "1",
+                "-update",
+                "1",
+                str(output),
             ]
             result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=RENDER_TIMEOUT)
             if result.returncode or not output.is_file():

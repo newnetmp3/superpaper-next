@@ -405,7 +405,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         shader_row.AddGrowableCol(1, 1)
         shader_row.Add(
             wx.StaticText(statbox_parent_zoom, -1, "Local Anime4K shader:"),
-            0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5,
+            0,
+            wx.ALIGN_CENTER_VERTICAL | wx.LEFT,
+            5,
         )
         self.ch_local_shader = wx.Choice(statbox_parent_zoom)
         self._shader_names = [""]
