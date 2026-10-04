@@ -15,7 +15,7 @@ def source_identity(path, target=""):
     return str(target), os.path.normcase(os.path.realpath(os.path.expanduser(path)))
 
 
-def resolved_wallpaper_selections(source_groups, previous_selected, replacements):
+def resolved_wallpaper_selections(source_groups, previous_selected, replacements, *, targets=None):
     """Pin new Change Image selections into the exact render target slots.
 
     Each group is the source paths for one span area, display or span group.
@@ -38,8 +38,13 @@ def resolved_wallpaper_selections(source_groups, previous_selected, replacements
 
     result = []
     previous = previous_selected or []
+    target_ids = [str(index) for index in range(len(source_groups))] if targets is None else list(targets)
+    if len(target_ids) != len(source_groups):
+        raise ValueError("Source groups and target IDs must have matching lengths")
     for index, paths in enumerate(source_groups):
-        choice = replacements.get(str(index), replacements.get("") if len(source_groups) == 1 else None)
+        choice = replacements.get(target_ids[index])
+        if choice is None and len(source_groups) == 1:
+            choice = replacements.get("")
         if not permitted(choice, paths):
             choice = previous[index] if index < len(previous) else None
         if not permitted(choice, paths):
