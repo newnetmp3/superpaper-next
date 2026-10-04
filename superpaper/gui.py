@@ -785,8 +785,14 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         heading.SetFont(font)
         column.Add(heading, 0, wx.ALL, 14)
         self.studio_navigation = {}
-        for name in ("Wallpapers", "Displays", "Profiles", "Processing", "Advanced"):
-            button = wx.Button(self.studio_sidebar, label=name)
+        for name, icon in (
+            ("Wallpapers", "▣"),
+            ("Displays", "▤"),
+            ("Profiles", "◈"),
+            ("Processing", "✦"),
+            ("Advanced", "⚙"),
+        ):
+            button = wx.Button(self.studio_sidebar, label=f"{icon}   {name}")
             button.Bind(wx.EVT_BUTTON, lambda event, workspace=name: self._set_studio_workspace(workspace))
             column.Add(button, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 7)
             self.studio_navigation[name] = button
@@ -803,8 +809,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         font.SetWeight(wx.FONTWEIGHT_BOLD)
         title.SetFont(font)
         self.studio_header.Add(title, 1, wx.ALIGN_CENTER_VERTICAL)
-        self.studio_apply = wx.Button(self, label="Save && Apply")
-        self.studio_apply.Bind(wx.EVT_BUTTON, self.onSaveAndApply)
+        self.studio_save = wx.Button(self, label="Save Profile")
+        self.studio_save.Bind(wx.EVT_BUTTON, self.onSave)
+        self.studio_header.Add(self.studio_save, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+        self.studio_apply = wx.Button(self, label="Apply")
+        self.studio_apply.Bind(wx.EVT_BUTTON, self.onApply)
+        self.studio_apply.SetBackgroundColour(wx.Colour(35, 110, 207))
+        self.studio_apply.SetForegroundColour(wx.Colour(255, 255, 255))
         self.studio_header.Add(self.studio_apply, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
 
         self.studio_preview_tools = wx.BoxSizer(wx.HORIZONTAL)
@@ -823,6 +834,54 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_monitor_choice.SetSelection(0)
         self.studio_monitor_choice.Bind(wx.EVT_CHOICE, self._studio_choose_monitor)
         self.studio_preview_tools.Add(self.studio_monitor_choice, 0, wx.ALIGN_CENTER_VERTICAL)
+        self.studio_reset_view = wx.Button(self, label="Reset View")
+        self.studio_reset_view.Bind(wx.EVT_BUTTON, self.onResetZoom)
+        self.studio_preview_tools.Add(self.studio_reset_view, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+
+        self.studio_source_tools = wx.BoxSizer(wx.HORIZONTAL)
+        self.studio_sources_toggle = wx.Button(self, label="Show image sources")
+        self.studio_sources_toggle.Bind(wx.EVT_BUTTON, self._studio_toggle_sources)
+        self.studio_source_tools.Add(self.studio_sources_toggle, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self.studio_source_tools.Add(
+            wx.StaticText(self, label="Click and drag the monitor preview to reposition an image."),
+            0, wx.ALIGN_CENTER_VERTICAL,
+        )
+        self._sources_expanded = False
+
+        self.studio_image_card = wx.BoxSizer(wx.VERTICAL)
+        self.studio_image_card.Add(
+            wx.StaticText(self, label="IMAGE & PLACEMENT"), 0, wx.EXPAND | wx.BOTTOM, 8
+        )
+        empty_image = Image.new("RGB", (300, 103), (25, 33, 44))
+        self.studio_image_thumbnail = wx.StaticBitmap(
+            self, bitmap=wx.Bitmap.FromBuffer(300, 103, empty_image.tobytes())
+        )
+        self.studio_image_card.Add(self.studio_image_thumbnail, 0, wx.EXPAND | wx.BOTTOM, 6)
+        self.studio_image_name = wx.StaticText(self, label="No image selected")
+        self.studio_image_card.Add(self.studio_image_name, 0, wx.EXPAND | wx.BOTTOM, 7)
+        self.studio_change_image = wx.Button(self, label="Change Image...")
+        self.studio_change_image.Bind(wx.EVT_BUTTON, self.onBrowsePaths)
+        self.studio_image_card.Add(self.studio_change_image, 0, wx.EXPAND)
+
+        self.studio_fit_row = wx.BoxSizer(wx.VERTICAL)
+        self.studio_fit_row.Add(
+            wx.StaticText(self, label="Fit method"), 0, wx.BOTTOM, 5
+        )
+        self.studio_fit_choice = wx.Choice(
+            self, choices=["Span (keep aspect)", "Advanced span / bezels", "Separate per monitor"]
+        )
+        self.studio_fit_choice.SetSelection(0)
+        self.studio_fit_choice.Bind(wx.EVT_CHOICE, self._studio_fit_changed)
+        self.studio_fit_row.Add(self.studio_fit_choice, 0, wx.EXPAND)
+
+        self.studio_profile_inspector = wx.BoxSizer(wx.VERTICAL)
+        self.studio_profile_inspector.Add(
+            wx.StaticText(
+                self, label="Choose a thumbnail to load a profile.\n"
+                "Changes to the selected profile are editable in the other workspaces."
+            ), 0, wx.EXPAND | wx.ALL, 8,
+        )
+
         self.studio_workspace_title = wx.StaticText(self, label="WALLPAPERS")
         font = self.studio_workspace_title.GetFont()
         font.SetPointSize(font.GetPointSize() + 2)
@@ -839,7 +898,16 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             return
         self._workspace = name
         for key, section in self._workspace_sizers.items():
-            self.sizer_bottom_half.Show(section, show=key == name)
+            self.studio_inspector.Show(section, show=key == name)
+        self.studio_inspector.Show(self.studio_image_card, show=name == "Wallpapers")
+        self.studio_inspector.Show(self.studio_fit_row, show=name == "Wallpapers")
+        self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
+        self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
+        self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
+        self.studio_canvas_column.Show(
+            self.sizer_settings_right, show=name == "Wallpapers" and self._sources_expanded
+        )
+        self.studio_canvas_column.Show(self.sizer_gallery, show=name == "Profiles")
         self.studio_workspace_title.SetLabel(name.upper())
         for key, button in self.studio_navigation.items():
             selected = key == name
@@ -848,11 +916,58 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             button.Refresh()
         if name == "Profiles":
             self._refresh_profile_gallery()
+        self.studio_canvas_column.Layout()
+        self.studio_inspector.Layout()
         self.sizer_bottom_half.Layout()
         self.sizer_main.Layout()
         self.FitInside()
         self.Scroll(0, 0)
         self.resized = True
+
+    def _studio_toggle_sources(self, event):
+        """Expose full existing source manager only when the user needs it."""
+        self._sources_expanded = not self._sources_expanded
+        self.studio_sources_toggle.SetLabel(
+            "Hide image sources" if self._sources_expanded else "Show image sources"
+        )
+        self.studio_canvas_column.Show(
+            self.sizer_settings_right, show=self._sources_expanded and self._workspace == "Wallpapers"
+        )
+        self.studio_canvas_column.Layout()
+        self.sizer_main.Layout()
+        self.FitInside()
+
+    def _studio_fit_changed(self, event):
+        """Keep the compact fit selector and original span engine in sync."""
+        value = self.studio_fit_choice.GetSelection()
+        if value != wx.NOT_FOUND:
+            self.radiobox_spanmode.SetSelection(value)
+            self.onSpanRadio(None)
+            self.studio_fit_choice.SetSelection(self.radiobox_spanmode.GetSelection())
+
+    def _studio_refresh_image_card(self):
+        """Use original image for inspector thumbnail, never cloud AI output."""
+        if not hasattr(self, "studio_image_thumbnail"):
+            return
+        images = self.wpprev_pnl.current_preview_images
+        path = images[0] if images else ""
+        canvas = Image.new("RGB", (300, 103), (25, 33, 44))
+        if path and os.path.isfile(path):
+            try:
+                with Image.open(path) as image:
+                    source = ImageOps.exif_transpose(image)
+                    source.thumbnail((300, 103), Image.Resampling.LANCZOS)
+                    if source.mode == "RGBA":
+                        canvas.paste(source, ((300 - source.width) // 2, (103 - source.height) // 2), source)
+                    else:
+                        canvas.paste(source.convert("RGB"), ((300 - source.width) // 2, (103 - source.height) // 2))
+                self.studio_image_name.SetLabel(os.path.basename(path))
+                self.studio_image_name.SetToolTip(path)
+            except OSError, ValueError:
+                self.studio_image_name.SetLabel("Image unavailable")
+        else:
+            self.studio_image_name.SetLabel("No image selected")
+        self.studio_image_thumbnail.SetBitmap(wx.Bitmap.FromBuffer(300, 103, canvas.tobytes()))
 
     def _studio_toggle_compare(self, event):
         self.wpprev_pnl.compare_original = self.studio_compare.GetValue()
