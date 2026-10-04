@@ -9,6 +9,7 @@ import time
 from typing import Literal, overload
 
 from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
+import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
 
 import superpaper.sp_logging as sp_logging
 from superpaper.cloud_upscale import locally_sharpen
@@ -28,7 +29,6 @@ from superpaper.preview_geometry import (
 from superpaper.sp_paths import RESOURCES_PATH
 from superpaper.wallpaper_processing import resize_to_fill
 
-import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
 
 
 class WallpaperPreviewPanel(wx.Panel):
