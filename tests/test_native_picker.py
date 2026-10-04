@@ -52,8 +52,10 @@ def test_kdialog_supports_multiple_images_and_folder_choice(tmp_path):
     options = {"environment": {"XDG_CURRENT_DESKTOP": "KDE"}, "which": lambda _: "kdialog", "runner": runner}
     assert pick_kde_paths(str(tmp_path), multiple=True, **options) == ["/tmp/one.png", "/tmp/two.webp"]
     assert calls[-1][-2:] == ["--multiple", "--separate-output"]
+
     def runner_folder(*_args, **_kwargs):
         return completed(0, "/tmp/wallpaper folder\n")
+
     assert pick_kde_paths(str(tmp_path), folders=True, **(options | {"runner": runner_folder})) == [
         "/tmp/wallpaper folder"
     ]
@@ -67,6 +69,7 @@ def test_cancel_does_not_reopen_gtk_fallback(tmp_path):
 def test_unavailable_kde_picker_explicitly_requests_toolkit_fallback(tmp_path):
     def runner(*_a, **_kw):
         pytest.fail("Should not start process without kdialog")
+
     assert (
         pick_kde_paths(
             str(tmp_path),
