@@ -36,3 +36,18 @@ Python 3.14+:
 pipx install --system-site-packages git+https://github.com/mauro-lanza/superpaper-next.git
 ```
 On some Linux setups, you might need to log out and in, or restart to get the menu/launcher entry to show up.
+
+
+### Native KDE image picker
+
+On KDE Plasma, **Change Image**, **Add images**, and **Add folder** now launch
+KDE's system file chooser through `kdialog`. On Arch Linux:
+
+```sh
+sudo pacman -S kdialog
+```
+
+On KDE without `kdialog`, or on other desktops/operating systems,
+Superpaper uses wxPython's platform file dialog. The former `GenericDirCtrl`
+wallpaper tree browser has been removed. Image selection updates only the
+local preview; it does not apply or save the profile or contact Cloud AI.
