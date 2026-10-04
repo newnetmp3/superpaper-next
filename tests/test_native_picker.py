@@ -53,7 +53,7 @@ def test_kdialog_supports_multiple_images_and_folder_choice(tmp_path):
     assert pick_kde_paths(str(tmp_path), multiple=True, **options) == ["/tmp/one.png", "/tmp/two.webp"]
     assert calls[-1][-2:] == ["--multiple", "--separate-output"]
     runner_folder = lambda *_args, **_kwargs: completed(0, "/tmp/wallpaper folder\n")
-    assert pick_kde_paths(str(tmp_path), folders=True, runner=runner_folder, **(options | {"runner": runner_folder})) == [
+    assert pick_kde_paths(str(tmp_path), folders=True, **(options | {"runner": runner_folder})) == [
         "/tmp/wallpaper folder"
     ]
 
