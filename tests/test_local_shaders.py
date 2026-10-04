@@ -143,7 +143,7 @@ def test_real_render_wires_selected_shader_without_cloud(profile_modules, tmp_pa
     source = tmp_path / "wall.png"
     Image.new("RGB", (30, 20), "orange").save(source)
     cache = tmp_path / "cache"
-    cache.mkdir()
+    cache.mkdir(exist_ok=True)
     monkeypatch.setattr(wpproc, "TEMP_PATH", str(cache))
     monkeypatch.setattr(wpproc, "RESOLUTION_ARRAY", [(60, 40)])
     monkeypatch.setattr(wpproc, "DISPLAY_OFFSET_ARRAY", [(0, 0)])
