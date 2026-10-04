@@ -1,10 +1,13 @@
 """The KDE picker launches a real system dialog; CI replaces only the process."""
 
+import ast
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from superpaper.native_picker import IMAGE_FILTER, NativePickerError, kde_session, pick_kde_paths
+from superpaper.source_paths import source_identity
 
 
 def completed(code, stdout="", stderr=""):
@@ -100,3 +103,85 @@ def test_picker_errors_do_not_masquerade_as_cancellations(tmp_path):
             runner=lambda *_a, **_kw: (_ for _ in ()).throw(OSError("disconnected")),
             **options,
         )
+
+
+def _change_image_action():
+    """Run only the real handler, without loading wxPython into headless CI."""
+    gui = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    tree = ast.parse(gui.read_text(encoding="utf-8"))
+    panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperSettingsPanel")
+    method = next(node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "onChangeImage")
+    namespace = {"source_identity": source_identity}
+    exec(compile(ast.Module(body=[method], type_ignores=[]), "<change-image>", "exec"), namespace)
+    return namespace["onChangeImage"]
+
+
+class FakeSourceList:
+    def __init__(self, rows, selected):
+        self.rows = rows
+        self.selected = selected
+
+    def GetColumnCount(self):
+        return len(self.rows[0])
+
+    def GetFirstSelected(self):
+        return self.selected
+
+    def GetItemCount(self):
+        return len(self.rows)
+
+    def GetItemText(self, index, column):
+        return self.rows[index][column]
+
+    def DeleteItem(self, index):
+        self.rows.pop(index)
+        self.selected = -1
+
+    def Select(self, index):
+        self.selected = index
+
+
+def test_change_image_replaces_only_selected_monitor_without_discarding_others(tmp_path):
+    new = str(tmp_path / "new.png")
+    original = str(tmp_path / "original.jpg")
+    other_monitor = str(tmp_path / "other.jpg")
+    sources = FakeSourceList([["0", original], ["1", other_monitor]], selected=0)
+    previews, edits = [], []
+    panel = SimpleNamespace(
+        path_listctrl=sources,
+        _choose_native_sources=lambda **_kwargs: [new],
+        _choose_source_target=lambda index: sources.GetItemText(index, 0),
+        append_to_listctrl=lambda row: sources.rows.append(row),
+        _preview_source_path=previews.append,
+        _update_dirty_state=lambda: edits.append(True),
+    )
+    _change_image_action()(panel, None)
+    assert ["1", other_monitor] in sources.rows
+    assert ["0", new] in sources.rows
+    assert ["0", original] not in sources.rows
+    assert previews == [new]
+    assert edits == [True]
+
+
+def test_cancel_native_change_image_does_not_mutate_any_sources(tmp_path):
+    original = str(tmp_path / "original.jpg")
+    sources = FakeSourceList([[original]], selected=0)
+    panel = SimpleNamespace(
+        path_listctrl=sources,
+        _choose_native_sources=lambda **_kwargs: [],
+        _choose_source_target=lambda _index: pytest.fail("Cancelled selection must not choose target"),
+        _preview_source_path=lambda _path: pytest.fail("Cancelled selection must not preview"),
+    )
+    _change_image_action()(panel, None)
+    assert sources.rows == [[original]]
+
+
+def test_old_generic_directory_browser_is_no_longer_referenced():
+    root = Path(__file__).resolve().parents[1] / "superpaper"
+    gui = (root / "gui.py").read_text(encoding="utf-8")
+    dialogs = (root / "configuration_dialogs.py").read_text(encoding="utf-8")
+    assert "BrowsePaths(" not in gui
+    assert "class BrowsePaths(" not in dialogs
+    assert "wx.GenericDirCtrl(" not in dialogs
+    assert "self.studio_change_image.Bind(wx.EVT_BUTTON, self.onChangeImage)" in gui
+    assert "pick_kde_paths(" in gui
