@@ -379,9 +379,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         zoom_grid.Add(self.st_offy_val, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
         self.sizer_setting_zoom.Add(zoom_grid, 0, wx.EXPAND | wx.ALL, 5)
 
-        self.sizer_setting_processing = wx.StaticBoxSizer(
-            wx.VERTICAL, self, "Image processing and effects"
-        )
+        self.sizer_setting_processing = wx.StaticBoxSizer(wx.VERTICAL, self, "Image processing and effects")
         processing_parent = self.sizer_setting_processing.GetStaticBox()
         self.cb_cloud_upscale = wx.CheckBox(processing_parent, -1, "Cloud AI upscale (uploads images)")
         self.cb_cloud_upscale.SetToolTip(
@@ -451,16 +449,16 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
         self.sizer_setting_processing.Add(
             wx.StaticText(processing_parent, label="Local image adjustments (no uploads)"),
-            0, wx.LEFT | wx.TOP | wx.BOTTOM, 8,
+            0,
+            wx.LEFT | wx.TOP | wx.BOTTOM,
+            8,
         )
         self.studio_tone_controls = {}
         self.studio_tone_labels = {}
         tone_grid = wx.FlexGridSizer(3, 3, 6, 6)
         tone_grid.AddGrowableCol(1, 1)
         for name in ("Brightness", "Contrast", "Saturation"):
-            tone_grid.Add(
-                wx.StaticText(processing_parent, label=f"{name}:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5
-            )
+            tone_grid.Add(wx.StaticText(processing_parent, label=f"{name}:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
             slider = wx.Slider(processing_parent, value=0, minValue=-100, maxValue=100)
             slider.SetToolTip(f"{name} (-100 to +100). Rendered locally; Cloud AI credits are unaffected.")
             slider.Bind(wx.EVT_SLIDER, self._on_studio_tone_changed)
@@ -855,7 +853,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         """Profiles are displayed with actual wallpaper thumbnails."""
         self.sizer_gallery.Add(
             wx.StaticText(self, label="Saved profiles - select a thumbnail to edit or apply."),
-            0, wx.ALL, 5,
+            0,
+            wx.ALL,
+            5,
         )
         self.gallery_list = wx.ListCtrl(self, style=wx.LC_ICON | wx.LC_SINGLE_SEL)
         self.gallery_list.SetMinSize(wx.Size(550, 245))
@@ -891,9 +891,11 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                             original = ImageOps.exif_transpose(source)
                             original.thumbnail((156, 95), Image.Resampling.LANCZOS)
                             canvas = Image.new("RGB", (156, 95), (29, 36, 46))
-                            canvas.paste(original.convert("RGB"), ((156 - original.width) // 2, (95 - original.height) // 2))
+                            canvas.paste(
+                                original.convert("RGB"), ((156 - original.width) // 2, (95 - original.height) // 2)
+                            )
                             bitmap = wx.Bitmap.FromBuffer(156, 95, canvas.tobytes())
-                    except (OSError, ValueError):
+                    except OSError, ValueError:
                         pass
                 thumb = thumbs.Add(bitmap)
                 row = self.gallery_list.InsertItem(self.gallery_list.GetItemCount(), profile.name, thumb)
@@ -1490,10 +1492,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.ch_local_shader.SetSelection(self._shader_names.index(selected))
 
     def _on_studio_tone_changed(self, event):
-        tone = tuple(
-            self.studio_tone_controls[key].GetValue()
-            for key in ("brightness", "contrast", "saturation")
-        )
+        tone = tuple(self.studio_tone_controls[key].GetValue() for key in ("brightness", "contrast", "saturation"))
         for key, value in zip(("brightness", "contrast", "saturation"), tone):
             self.studio_tone_labels[key].SetLabel(str(value))
         self.wpprev_pnl.tone = tone
