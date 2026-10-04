@@ -296,10 +296,7 @@ def diagnose_ffmpeg_backend(ffmpeg):
             failures.append(f"{mode}: {exc}")
             continue
         if result.returncode == 0:
-            return (
-                f"Baseline {mode} succeeded without Anime4K; "
-                "investigate GLSL parsing or image format instead."
-            )
+            return f"Baseline {mode} succeeded without Anime4K; investigate GLSL parsing or image format instead."
         failures.append(f"{mode}: {shader_error_detail(result.stderr)}")
     return "Baseline libplacebo failed without Anime4K:\n" + "\n".join(failures)
 
