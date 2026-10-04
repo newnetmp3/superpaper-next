@@ -7,6 +7,7 @@ import pytest
 
 from superpaper.preview_geometry import (
     crop_overflow,
+    desktop_preview_layout,
     fit_preview_canvas,
     has_positive_area,
     pan_offset_for_drag,
@@ -202,3 +203,48 @@ def test_wallpaper_bitmap_drag_coordinates_are_relative_to_parent():
 
     parent_mapped = translate(panel, Event(panel, original))
     assert parent_mapped is original
+
+
+def test_desktop_preview_uses_digital_offsets_and_actual_monitor_dimensions():
+    # Representative screenshot setup: three different resolutions and
+    # different monitor top edges in the virtual desktop.
+    displays = [
+        ((2259, 1271), (0, 140)),
+        ((2560, 1440), (2259, 272)),
+        ((1920, 1080), (4819, 222)),
+    ]
+    canvas_size, position, rects = desktop_preview_layout(displays, (1080, 265))
+    assert canvas_size[0] <= 1080
+    assert canvas_size[1] <= 265
+    assert rects[0][0] < rects[1][0] < rects[2][0]
+    assert rects[0][1] < rects[2][1] < rects[1][1]
+    # Center monitor must be relatively taller; no forced equal-height tiles.
+    assert rects[1][3] > rects[0][3] > rects[2][3]
+    assert rects[0][0] >= position[0]
+    assert rects[0][1] >= position[1]
+
+
+def test_desktop_preview_handles_negative_offsets_and_empty_inputs():
+    _canvas, _position, rects = desktop_preview_layout(
+        [((1920, 1080), (-1920, -200)), ((2560, 1440), (0, 0))], (720, 400)
+    )
+    assert rects[0][0] < rects[1][0]
+    assert rects[0][1] < rects[1][1]
+    with pytest.raises(ValueError):
+        desktop_preview_layout([], (800, 300))
+    with pytest.raises(ValueError):
+        desktop_preview_layout([((0, 1080), (0, 0))], (800, 300))
+
+
+def test_desktop_preview_preserves_mouse_drags_and_calibration_mode():
+    source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    preview = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel"
+    )
+    methods = {node.name: ast.unparse(node) for node in preview.body if isinstance(node, ast.FunctionDef)}
+    assert "self.desktop_preview.Bind(wx.EVT_LEFT_DOWN, self._on_background_down)" in methods["__init__"]
+    assert "self.desktop_preview.IsShown()" in methods["_drag_target"]
+    assert "self.set_desktop_layout(False)" in methods["onConfigure"]
+    assert "desktop_preview_layout(displays, self.GetClientSize())" in methods["_desktop_preview_rectangles"]
+    assert "prepare_cloud_upscaled_image(" not in methods["_update_desktop_preview"]
