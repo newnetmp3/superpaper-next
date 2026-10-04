@@ -203,6 +203,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Add(self.sizer_top_half, 0, wx.EXPAND | wx.ALL, 4)
         self.studio_canvas_column.Add(self.studio_preview_tools, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 7)
         self.studio_canvas_column.Add(self.studio_alignment_tools, 0, wx.EXPAND | wx.ALL, 7)
+        self.studio_canvas_column.Add(self.studio_display_editor, 0, wx.EXPAND | wx.ALL, 7)
+        self.studio_canvas_column.Hide(self.studio_display_editor, recursive=True)
         self.studio_canvas_column.Add(self.studio_source_tools, 0, wx.EXPAND | wx.ALL, 8)
         self.studio_canvas_column.Add(self.sizer_settings_right, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.studio_canvas_column.Hide(self.sizer_settings_right, recursive=True)
@@ -886,6 +888,32 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_zoom_label = wx.StaticText(self, label="100%", size=wx.Size(50, -1))
         self.studio_alignment_tools.Add(self.studio_zoom_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
 
+        self.studio_display_editor = wx.BoxSizer(wx.VERTICAL)
+        self.studio_display_editor.Add(
+            wx.StaticText(self, label="DISPLAY LAYOUT - choose a monitor to focus its preview"),
+            0, wx.BOTTOM, 9,
+        )
+        tiles = wx.BoxSizer(wx.HORIZONTAL)
+        for index, display in enumerate(self.display_sys.disp_list):
+            width, height = display.resolution
+            tile = wx.Button(self, label=f"Monitor {index + 1}\n{width} x {height}")
+            tile.SetMinSize(wx.Size(148, 77))
+            tile.SetBackgroundColour(wx.Colour(27, 50, 77))
+            tile.SetForegroundColour(wx.Colour(238, 245, 255))
+            tile.Bind(wx.EVT_BUTTON, lambda event, number=index + 1: self._studio_focus_display(number))
+            tiles.Add(tile, 1, wx.EXPAND | wx.RIGHT, 7)
+        self.studio_display_editor.Add(tiles, 0, wx.EXPAND | wx.BOTTOM, 10)
+        arrange = wx.Button(self, label="Arrange monitors in preview...")
+        arrange.SetToolTip("Drag monitors to their real positions; use the preview's Save control to stage offsets.")
+        arrange.Bind(wx.EVT_BUTTON, self._studio_arrange_displays)
+        self.studio_display_editor.Add(arrange, 0, wx.ALIGN_LEFT)
+        self.studio_display_editor.Add(
+            wx.StaticText(
+                self, label="Drag the monitors in the preview, then Save there. "
+                "Use the Displays system settings to persist calibration."
+            ), 0, wx.TOP, 9,
+        )
+
         self.studio_source_tools = wx.BoxSizer(wx.HORIZONTAL)
         self.studio_sources_toggle = wx.Button(self, label="Show image sources")
         self.studio_sources_toggle.Bind(wx.EVT_BUTTON, self._studio_toggle_sources)
@@ -959,6 +987,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
+        self.studio_canvas_column.Show(self.studio_alignment_tools, show=name == "Wallpapers", recursive=True)
+        self.studio_canvas_column.Show(self.studio_display_editor, show=name == "Displays", recursive=True)
         self.studio_canvas_column.Show(
             self.sizer_settings_right, show=name == "Wallpapers" and self._sources_expanded, recursive=True
         )
@@ -1021,6 +1051,21 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         else:
             self.studio_image_name.SetLabel("No image selected")
         self.studio_image_thumbnail.SetBitmap(wx.Bitmap.FromBuffer(300, 103, canvas.tobytes()))
+
+    def _studio_focus_display(self, number):
+        self.studio_monitor_choice.SetSelection(number)
+        self._studio_choose_monitor(None)
+
+    def _studio_arrange_displays(self, event):
+        """Use the existing real monitor drag engine, not mockup-only tiles."""
+        if not self.show_advanced_settings:
+            self.studio_fit_choice.SetSelection(1)
+            self._studio_fit_changed(None)
+        if self.show_advanced_settings and not self.wpprev_pnl.config_mode:
+            self.studio_monitor_choice.SetSelection(0)
+            self._studio_choose_monitor(None)
+            self.wpprev_pnl.onConfigure(None)
+            self.studio_status.SetLabel("Drag monitor tiles in the preview; choose Save on the preview when done.")
 
     def _studio_align_image(self, value):
         """Apply alignment through the existing position and dirty-state logic."""
