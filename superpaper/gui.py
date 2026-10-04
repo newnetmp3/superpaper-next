@@ -179,6 +179,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         # table beneath all controls.
         self.sizer_setting_sizers.Add(self.sizer_settings_left, 1, wx.EXPAND | wx.ALL, 5)
         self.sizer_displays = wx.BoxSizer(wx.VERTICAL)
+        self.sizer_displays.Add(self.radiobox_spanmode, 0, wx.EXPAND | wx.ALL, 5)
         self.sizer_displays.Add(self.system_pane, 0, wx.EXPAND | wx.ALL, 5)
         self.sizer_displays.Add(self.sizer_setting_adv, 0, wx.EXPAND | wx.ALL, 5)
         self.sizer_displays.Hide(self.sizer_setting_adv)
@@ -290,9 +291,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_profiles.Add(self.choice_profiles, 0, wx.CENTER | wx.ALL, 5)
         self.sizer_profiles.Add(st_name, 0, wx.CENTER | wx.ALL, 5)
         self.sizer_profiles.Add(self.tc_name, 0, wx.CENTER | wx.ALL, 5)
-        self.sizer_profiles.Add(self.button_save, 0, wx.CENTER | wx.ALL, 5)
-        self.sizer_profiles.Add(self.button_revert, 0, wx.CENTER | wx.ALL, 5)
-        self.sizer_profiles.Add(self.button_delete, 0, wx.CENTER | wx.ALL, 5)
 
     def create_sizer_settings_left(self):
         # span mode sizer
@@ -501,7 +499,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_setting_zoom.Add(reset_row, 0, wx.EXPAND | wx.BOTTOM, 3)
 
         # Add subsizers to the left column sizer
-        self.sizer_settings_left.Add(self.radiobox_spanmode, 0, wx.EXPAND, 5)
         self.sizer_settings_left.Add(self.sizer_setting_zoom, 0, wx.EXPAND | wx.TOP, 5)
 
     def create_sizer_settings_right(self):
@@ -881,6 +878,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 "Changes to the selected profile are editable in the other workspaces."
             ), 0, wx.EXPAND | wx.ALL, 8,
         )
+        self.studio_profile_inspector.Add(self.button_save, 0, wx.EXPAND | wx.ALL, 5)
+        self.studio_profile_inspector.Add(self.button_revert, 0, wx.EXPAND | wx.ALL, 5)
+        self.studio_profile_inspector.Add(self.button_delete, 0, wx.EXPAND | wx.ALL, 5)
 
         self.studio_workspace_title = wx.StaticText(self, label="WALLPAPERS")
         font = self.studio_workspace_title.GetFont()
@@ -1221,6 +1221,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.read_spangroups(True),
         )
         self.wpprev_pnl.toggle_buttons(show_config=self.show_advanced_settings, in_config=False)
+        self.studio_fit_choice.SetSelection(self.radiobox_spanmode.GetSelection())
+        self._studio_refresh_image_card()
 
         # Loaded data is the new clean baseline. Slideshow normalization in
         # _collect_temp_profile means the later (posted) checkbox events produce
@@ -1715,6 +1717,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 self.radiobox_spanmode.SetSelection(2)
             else:
                 self.radiobox_spanmode.SetSelection(0)
+            self.studio_fit_choice.SetSelection(self.radiobox_spanmode.GetSelection())
             return
         self.show_adv_setting_sizer(self.show_advanced_settings)
         display_data = self.display_sys.get_disp_list(self.show_advanced_settings)
@@ -1725,6 +1728,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             display_data, self.show_advanced_settings, self.use_multi_image, spangroups=spangroups
         )
         self.wpprev_pnl.toggle_buttons(show_config=self.show_advanced_settings, in_config=False)
+        self.studio_fit_choice.SetSelection(self.radiobox_spanmode.GetSelection())
         self._update_dirty_state()
 
     def onCheckboxSlideshow(self, event):
@@ -1918,6 +1922,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             display_data,
             self.read_spangroups(True),
         )
+        self._studio_refresh_image_card()
 
     def onConfigureBezels(self, event):
         """Start bezel size config mode."""
@@ -1957,6 +1962,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             if dlg.ShowModal() == wx.ID_OK:
                 self.defdir = dlg.defdir
                 self.populate_lc_browse(dlg.path_list_data, dlg.il)
+                self._studio_refresh_image_card()
         finally:
             dlg.Destroy()
 
@@ -2288,6 +2294,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 display_data,
                 groups,
             )
+            self._studio_refresh_image_card()
             # Saved state becomes the new clean baseline.
             self.list_of_profiles = self.parent_tray_obj.list_of_profiles
             self._set_clean_baseline()
@@ -2348,7 +2355,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.wpprev_pnl.focus_monitor = 0
 
         # refresh wallpaper preview back to black previews
+        self.wpprev_pnl.current_preview_images = []
         self.wpprev_pnl.draw_displays()
+        self._studio_refresh_image_card()
         self.Refresh()
         self.Update()
 
