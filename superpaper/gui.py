@@ -1333,9 +1333,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         """
         visible = name not in ("Displays", "Profiles")
         self.studio_preview_tools.Show(self.studio_compare_row, show=visible, recursive=True)
-        self.studio_compare_row.Show(
-            self.studio_compare_state, show=visible and self.studio_compare.GetValue()
-        )
+        self.studio_compare_row.Show(self.studio_compare_state, show=visible and self.studio_compare.GetValue())
         effective_compare = visible and self.studio_compare.GetValue()
         if self.wpprev_pnl.compare_original != effective_compare:
             self.wpprev_pnl.compare_original = effective_compare
