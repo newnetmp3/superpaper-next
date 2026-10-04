@@ -3315,7 +3315,7 @@ class WallpaperPreviewPanel(wx.Panel):
                 # st_bmp.Show()
         # Preserve the unlabelled per-monitor images. The virtual desktop
         # preview repositions these same crops at actual OS monitor offsets.
-        self._raw_preview_bmps = [bitmap.GetBitmap() for bitmap in self.preview_img_list]
+        self._raw_preview_bmps = [wx.Bitmap(bitmap.GetBitmap().ConvertToImage()) for bitmap in self.preview_img_list]
         for index, bitmap in enumerate(self.preview_img_list):
             bitmap.Show(self.focus_monitor == 0 or index == self.focus_monitor - 1)
         self.draw_monitor_numbers(use_ppi_px)
