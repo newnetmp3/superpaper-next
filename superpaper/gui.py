@@ -3590,7 +3590,9 @@ class WallpaperPreviewPanel(wx.Panel):
         self.button_reset = wx.Button(self, label="Reset")
         self.button_cancel = wx.Button(self, label="Cancel")
         self.button_entry = wx.Button(self, label="Exact entry")
-        self.button_help = wx.Button(self, label="?", size=wx.Size(27, 27), name="butt_help")
+        # GTK themes can require more than 27px for a button's padding and
+        # borders alone. Let the native toolkit choose a valid minimum size.
+        self.button_help = wx.Button(self, label="Help", name="butt_help")
         self.button_help.SetToolTip("About monitor preview and positioning")
 
         self.button_config.Bind(wx.EVT_BUTTON, self.onConfigure)
