@@ -595,6 +595,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.ch_local_shader = wx.Choice(processing_parent)
         self._shader_names = [""]
+        self.cb_shader_advanced = wx.CheckBox(processing_parent, label="Show individual shaders (advanced)")
+        self.cb_shader_advanced.SetValue(False)
+        self.cb_shader_advanced.SetToolTip(
+            "The MPV pack contains standalone effects and internal pipeline stages. "
+            "Mode A/B/C presets are recommended for normal wallpaper processing."
+        )
+        self.cb_shader_advanced.Bind(wx.EVT_CHECKBOX, self._on_shader_advanced_toggled)
         self._refresh_local_shader_options("")
         self.ch_local_shader.SetToolTip(
             "Use an ordered Mode A, B or C pipeline from the imported MPV Anime4K pack. "
@@ -611,6 +618,16 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.button_import_shaders.Bind(wx.EVT_BUTTON, self._on_import_shaders)
         shader_row.Add(self.button_import_shaders, 0)
         self.sizer_processing_shaders.Add(shader_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        self.sizer_processing_shaders.Add(self.cb_shader_advanced, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 9)
+        self.sizer_processing_shaders.Add(
+            wx.StaticText(
+                processing_parent,
+                label="Mode A: restore + upscale  •  Mode B: soft restore + upscale  •  Mode C: denoise + upscale",
+            ),
+            0,
+            wx.LEFT | wx.RIGHT | wx.BOTTOM,
+            9,
+        )
 
         self.sizer_processing_local.Add(
             wx.StaticText(processing_parent, label="Local image adjustments (no uploads)"),
@@ -2047,26 +2064,36 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self._update_dirty_state()
 
     def _refresh_local_shader_options(self, selected):
-        """Show all imported hooks and preserve a missing profile selection."""
+        """Show modes by default; preserve saved legacy individual effects."""
         selected = normalize_shader(selected)
-        names = available_shaders()
+        installed = set(available_shaders())
+        presets = sorted(name for name in installed if name.startswith("Anime4K_Mode_"))
+        individual = sorted(name for name in installed if not name.startswith("Anime4K_Mode_"))
+        names = presets + (individual if self.cb_shader_advanced.GetValue() else [])
         if selected and selected not in names:
             names.append(selected)
-        self._shader_names = ["", *sorted(names)]
-        installed = set(available_shaders())
-        labels = ["None"] + [
-            name.removeprefix("Anime4K_").removesuffix(".glsl").replace("_", " ")
-            + (
-                " (pipeline helper - choose Mode A/B/C)"
-                if "AutoDownscalePre" in name
-                else " (missing)"
-                if name not in installed
-                else ""
-            )
-            for name in self._shader_names[1:]
-        ]
-        self.ch_local_shader.SetItems(labels)
+        self._shader_names = ["", *names]
+
+        def display_name(name):
+            label = name.removeprefix("Anime4K_").removesuffix(".glsl").replace("_", " ")
+            if "AutoDownscalePre" in name:
+                return label + " (pipeline helper; select a Mode instead)"
+            if name not in installed:
+                return label + " (missing)"
+            if name not in presets and not self.cb_shader_advanced.GetValue():
+                return label + " (saved custom effect)"
+            return label
+
+        self.ch_local_shader.SetItems(["None", *(display_name(name) for name in names)])
         self.ch_local_shader.SetSelection(self._shader_names.index(selected))
+
+    def _on_shader_advanced_toggled(self, event):
+        """Toggle individual effects without changing the stored selection."""
+        selected = self._shader_names[max(0, self.ch_local_shader.GetSelection())]
+        self._refresh_local_shader_options(selected)
+        if hasattr(self, "studio_inspector"):
+            self.sizer_setting_processing.Layout()
+            self.studio_inspector.Layout()
 
     def _set_processing_tab(self, name):
         """Show only the selected, functional image-processing controls."""
