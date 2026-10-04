@@ -1,11 +1,11 @@
 """User help window, contextual popups and display-size explanations."""
 
+import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
+
 import superpaper.perspective as persp
 import superpaper.wallpaper_processing as wpproc
 from superpaper.data import GeneralSettingsData
 from superpaper.sp_paths import TRAY_ICON
-
-import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
 
 
 class HelpFrame(wx.Frame):
