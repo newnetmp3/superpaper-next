@@ -62,11 +62,14 @@ when the source already covers the display. Larger models may require more time
 and output memory; the 8× option is skipped for images whose resulting pixel
 count would exceed the safety limit.
 
-**Sharpen (local)** adds optional detail crispness after the cloud result,
-from 0 (unchanged) to 100. It is local Pillow processing, **not** a remote AI
-quality or denoise slider. Changing sharpness never consumes new cloud credits,
-and neither does disabling and re-enabling the same model: the model output is
-cached separately from the sharpening choice. Switching between 2×, 4× and 8×
+**Sharpen (local)** works with Cloud AI **on or off**, from 0 (unchanged) to 100.
+It sharpens the original image when cloud AI is disabled, skipped or unavailable,
+and sharpens the enhanced result when cloud AI succeeds. The preview always
+renders the original image with the chosen sharpness so positioning stays
+consistent. It is local Pillow processing, **not** a remote AI quality or denoise
+slider. Changing sharpness never consumes new cloud credits, and neither does
+disabling and re-enabling the same model: the model output is cached separately
+from the sharpening choice. Switching between 2×, 4× and 8×
 can require one cloud job per new choice, while returning to a cached choice
 reuses its existing result. Both preferences are stored per profile.
 
