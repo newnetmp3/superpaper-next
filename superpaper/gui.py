@@ -124,6 +124,38 @@ class StudioNavigationButton(wx.Control):
         dc.DrawText(self.label, max(39, icon_w + 21), max(0, (h - text_h) // 2))
 
 
+class StudioActionButton(StudioNavigationButton):
+    """A consistent, accessible painted action for the primary Studio commands."""
+
+    def __init__(self, parent, label, primary=False):
+        super().__init__(parent, label, "")
+        self.primary = primary
+        self.SetMinSize(wx.Size(max(96, len(label) * 8 + 26), 37))
+
+    def SetLabel(self, label):
+        self.label = label
+        self.Refresh()
+
+    def _paint(self, event):
+        dc = wx.AutoBufferedPaintDC(self)
+        w, h = self.GetClientSize()
+        dc.SetBackground(wx.Brush(wx.Colour(17, 27, 41)))
+        dc.Clear()
+        if self.primary:
+            background = wx.Colour(48, 132, 241) if self.hovered else wx.Colour(34, 107, 215)
+        else:
+            background = wx.Colour(57, 75, 98) if self.hovered else wx.Colour(43, 57, 75)
+        dc.SetPen(wx.Pen(wx.Colour(72, 99, 131) if not self.primary else wx.Colour(67, 148, 246)))
+        dc.SetBrush(wx.Brush(background))
+        dc.DrawRoundedRectangle(2, 2, max(1, w - 4), max(1, h - 4), 6)
+        font = self.GetFont()
+        font.SetWeight(wx.FONTWEIGHT_BOLD if self.primary else wx.FONTWEIGHT_NORMAL)
+        dc.SetFont(font)
+        dc.SetTextForeground(wx.Colour(247, 251, 255))
+        text_w, text_h = dc.GetTextExtent(self.label)
+        dc.DrawText(self.label, max(0, (w - text_w) // 2), max(0, (h - text_h) // 2))
+
+
 class ConfigFrame(wx.Frame):
     """Wallpaper configuration dialog frame base class."""
 
@@ -217,7 +249,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.wpprev_pnl = WallpaperPreviewPanel(self, self.display_sys)
         # A panorama must fill the useful height of the stage instead of
         # sitting as a thin strip in an oversized black rectangle.
-        self.wpprev_pnl.SetMinSize(wx.Size(620, 315))
+        self.wpprev_pnl.SetMinSize(wx.Size(450, 315))
         self.wpprev_pnl.SetMaxSize(wx.Size(10000, 365))
         self.sizer_top_half.Add(self.wpprev_pnl, 1, wx.EXPAND | wx.ALL, 5)
         # self.sizer_top_half.SetMinSize((400,200))
@@ -842,10 +874,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.button_align_test = wx.Button(self, label="Align Test")
         self.button_perspectives = wx.Button(self, label="Perspectives")
         self.button_apply = wx.Button(self, label="Apply")
-        self.button_save_apply = wx.Button(self, label="Save && Apply")
+        self.button_save_apply = StudioActionButton(self, "Save & Apply", primary=True)
         self.button_apply.SetToolTip("Apply temporarily. Save the profile to retain its framing settings.")
         self.button_save_apply.SetToolTip("Save zoom, position, upscaling and image choice, then apply them.")
-        self.button_close = wx.Button(self, label="Close")
+        self.button_close = StudioActionButton(self, "Close")
 
         self.button_apply.Bind(wx.EVT_BUTTON, self.onApply)
         self.button_save_apply.Bind(wx.EVT_BUTTON, self.onSaveAndApply)
@@ -913,10 +945,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_subtitle.SetForegroundColour(wx.Colour(171, 193, 221))
         title_group.Add(self.studio_subtitle, 0)
         self.studio_header.Add(title_group, 1, wx.ALIGN_CENTER_VERTICAL)
-        self.studio_save = wx.Button(self, label="Save Profile")
+        self.studio_save = StudioActionButton(self, "Save Profile")
         self.studio_save.Bind(wx.EVT_BUTTON, self.onSave)
         self.studio_header.Add(self.studio_save, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
-        self.studio_apply = wx.Button(self, label="Apply")
+        self.studio_apply = StudioActionButton(self, "Apply", primary=True)
         self.studio_apply.Bind(wx.EVT_BUTTON, self.onApply)
         self.studio_apply.SetBackgroundColour(wx.Colour(35, 110, 207))
         self.studio_apply.SetForegroundColour(wx.Colour(255, 255, 255))
@@ -944,7 +976,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_monitor_choice.SetSelection(0)
         self.studio_monitor_choice.Bind(wx.EVT_CHOICE, self._studio_choose_monitor)
         self.studio_preview_tools.Add(self.studio_monitor_choice, 0, wx.ALIGN_CENTER_VERTICAL)
-        self.studio_reset_view = wx.Button(self, label="Reset View")
+        self.studio_reset_view = StudioActionButton(self, "Reset View")
         self.studio_reset_view.Bind(wx.EVT_BUTTON, self.onResetZoom)
         self.studio_preview_tools.Add(self.studio_reset_view, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
 
@@ -999,7 +1031,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
 
         self.studio_source_tools = wx.BoxSizer(wx.HORIZONTAL)
-        self.studio_sources_toggle = wx.Button(self, label="Show image sources")
+        self.studio_sources_toggle = StudioActionButton(self, "Show image sources")
         self.studio_sources_toggle.Bind(wx.EVT_BUTTON, self._studio_toggle_sources)
         self.studio_source_tools.Add(self.studio_sources_toggle, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
         self.studio_source_tools.Add(
@@ -1018,7 +1050,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_image_card.Add(self.studio_image_thumbnail, 0, wx.EXPAND | wx.BOTTOM, 6)
         self.studio_image_name = wx.StaticText(self, label="No image selected")
         self.studio_image_card.Add(self.studio_image_name, 0, wx.EXPAND | wx.BOTTOM, 7)
-        self.studio_change_image = wx.Button(self, label="Change Image...")
+        self.studio_change_image = StudioActionButton(self, "Change Image...")
         self.studio_change_image.Bind(wx.EVT_BUTTON, self.onBrowsePaths)
         self.studio_image_card.Add(self.studio_change_image, 0, wx.EXPAND)
 
@@ -1232,11 +1264,11 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         quick_title = wx.StaticText(self, label="YOUR PROFILES")
         quick_title.SetForegroundColour(wx.Colour(226, 238, 250))
         quick_header.Add(quick_title, 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        all_profiles = wx.Button(self, label="View all profiles")
+        all_profiles = StudioActionButton(self, "View all profiles")
         all_profiles.Bind(wx.EVT_BUTTON, lambda event: self._set_studio_workspace("Profiles"))
         quick_header.Add(all_profiles, 0, wx.RIGHT, 5)
         self.studio_quick_profiles.Add(quick_header, 0, wx.EXPAND)
-        self.studio_quick_profile_row = wx.BoxSizer(wx.HORIZONTAL)
+        self.studio_quick_profile_row = wx.WrapSizer(wx.HORIZONTAL)
         self.studio_quick_profiles.Add(self.studio_quick_profile_row, 0, wx.EXPAND | wx.TOP, 6)
         self._building_gallery = False
 
