@@ -113,6 +113,7 @@ def test_no_wheel_rotation_does_not_move_the_scroll_position():
     """Entering a window without wheel movement must not trigger scrolling."""
     assert wheel_scroll_units(0, 120, 3) == (0, 0.0)
 
+
 def test_preview_uses_nearly_all_available_stage_width_without_stretching():
     canvas = (7000, 1440)
     stage = (1050, 265)
