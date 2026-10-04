@@ -1004,25 +1004,34 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_header.Add(self.studio_apply, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
         self.studio_apply.SetToolTip("Test wallpaper with unsaved settings. Use Save Profile to persist.")
 
-        self.studio_preview_tools = wx.BoxSizer(wx.HORIZONTAL)
+        # Keep comparison and monitor-view controls on separate rows. A single
+        # horizontal sizer allowed the comparison status label to expand into
+        # the inspector on GTK whenever a form control triggered layout.
+        self.studio_preview_tools = wx.BoxSizer(wx.VERTICAL)
+        self.studio_compare_row = wx.BoxSizer(wx.HORIZONTAL)
+        self.studio_view_row = wx.BoxSizer(wx.HORIZONTAL)
         self.studio_compare = wx.CheckBox(self, label="Split original / locally adjusted")
         self.studio_compare.SetToolTip(
             "Compare the original image (left) with local adjustments (right). "
             "Cloud AI and Vulkan shader effects appear only on the applied wallpaper."
         )
         self.studio_compare.Bind(wx.EVT_CHECKBOX, self._studio_toggle_compare)
-        self.studio_preview_tools.Add(self.studio_compare, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.studio_compare_row.Add(self.studio_compare, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
         self.studio_split_slider = wx.Slider(self, value=50, minValue=0, maxValue=100, size=wx.Size(130, -1))
         self.studio_split_slider.SetToolTip("Move the dividing line between original and locally adjusted preview.")
         self.studio_split_slider.Enable(False)
         self.studio_split_slider.Bind(wx.EVT_SLIDER, self._studio_compare_position)
-        self.studio_preview_tools.Add(self.studio_split_slider, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
-        self.studio_compare_state = wx.StaticText(self, label="No local adjustments")
+        self.studio_compare_row.Add(self.studio_split_slider, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+        self.studio_compare_state = wx.StaticText(self, label="No local edits")
         self.studio_compare_state.SetForegroundColour(wx.Colour(166, 197, 230))
+        self.studio_compare_state.SetToolTip(
+            "Only local sharpening, brightness, contrast and saturation are previewed. "
+            "With all of them at zero, the two sides show the same image."
+        )
         self.studio_compare_state.Hide()
-        self.studio_preview_tools.Add(self.studio_compare_state, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 9)
-        self.studio_preview_tools.AddStretchSpacer()
-        self.studio_preview_tools.Add(
+        self.studio_compare_row.Add(self.studio_compare_state, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 9)
+        self.studio_view_row.AddStretchSpacer()
+        self.studio_view_row.Add(
             wx.StaticText(self, label="Preview view:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
         )
         self.studio_desktop_layout = wx.CheckBox(self, label="Desktop layout")
@@ -1032,14 +1041,16 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             "Turn off to inspect the physical PPI/bezel arrangement."
         )
         self.studio_desktop_layout.Bind(wx.EVT_CHECKBOX, self._studio_toggle_desktop_layout)
-        self.studio_preview_tools.Add(self.studio_desktop_layout, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        self.studio_view_row.Add(self.studio_desktop_layout, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
         self.studio_monitor_choice = wx.Choice(self, choices=["All monitors"])
         self.studio_monitor_choice.SetSelection(0)
         self.studio_monitor_choice.Bind(wx.EVT_CHOICE, self._studio_choose_monitor)
-        self.studio_preview_tools.Add(self.studio_monitor_choice, 0, wx.ALIGN_CENTER_VERTICAL)
+        self.studio_view_row.Add(self.studio_monitor_choice, 0, wx.ALIGN_CENTER_VERTICAL)
         self.studio_reset_view = StudioActionButton(self, "Reset View")
         self.studio_reset_view.Bind(wx.EVT_BUTTON, self.onResetZoom)
-        self.studio_preview_tools.Add(self.studio_reset_view, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+        self.studio_view_row.Add(self.studio_reset_view, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+        self.studio_preview_tools.Add(self.studio_compare_row, 0, wx.EXPAND | wx.BOTTOM, 3)
+        self.studio_preview_tools.Add(self.studio_view_row, 0, wx.EXPAND)
 
         self.studio_alignment_tools = wx.BoxSizer(wx.HORIZONTAL)
         self.studio_alignment_tools.Add(
@@ -1184,7 +1195,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.sizer_setting_adv, show=name == "Displays" and self.show_advanced_settings, recursive=True
         )
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
-        self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
+        self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles", recursive=True)
+        self.studio_compare_row.Show(self.studio_compare_state, show=self.studio_compare.GetValue())
         self.studio_desktop_layout.Enable(name != "Displays")
         self.wpprev_pnl.set_desktop_layout(
             name not in ("Displays", "Profiles") and self.studio_desktop_layout.GetValue()
@@ -1307,13 +1319,15 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
 
     def _studio_update_compare_feedback(self):
-        """Explain when the split contains two identical, unedited images."""
+        """Show a compact comparison status without expanding the view toolbar."""
         enabled = self.studio_compare.GetValue()
         if enabled:
             has_edits = bool(self.wpprev_pnl.sharpen or any(self.wpprev_pnl.tone))
-            self.studio_compare_state.SetLabel("Blue divider" if has_edits else "No local edits (both sides match)")
-        self.studio_compare_state.Show(enabled)
+            self.studio_compare_state.SetLabel("Local edits active" if has_edits else "No local edits")
+        self.studio_compare_row.Show(self.studio_compare_state, show=enabled)
         self.studio_preview_tools.Layout()
+        if hasattr(self, "studio_canvas_column"):
+            self.studio_canvas_column.Layout()
 
     def _studio_compare_position(self, event):
         self.wpprev_pnl.compare_fraction = self.studio_split_slider.GetValue() / 100.0
