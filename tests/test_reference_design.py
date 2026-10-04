@@ -136,4 +136,4 @@ def test_wallpaper_layout_prioritizes_full_width_preview_and_inspector():
     nav = _method("WallpaperSettingsPanel", "create_studio_navigation")
     assert "self.studio_sidebar = wx.Panel(self, size=wx.Size(162, -1))" in nav
     switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
-    assert 'self.studio_inspector.Show(self.studio_workspace_title, show=name != "Wallpapers")' in switching
+    assert "self.studio_inspector.Show(self.studio_workspace_title, show=name != 'Wallpapers')" in switching
