@@ -18,10 +18,13 @@ def _method(class_name, method):
     return ast.unparse(matches[-1])
 
 
-def test_preview_stage_is_compact_and_not_stretched_to_window_height():
+def test_processing_stage_is_larger_than_other_preview_workspaces():
     setup = _method("WallpaperSettingsPanel", "__init__")
     assert "self.studio_canvas_column.Add(self.sizer_top_half, 0," in setup
-    assert "self.wpprev_pnl.SetMaxSize(wx.Size(10000, 295))" in setup
+    assert "self.wpprev_pnl.SetMaxSize(wx.Size(10000, 480))" in setup
+    switch = _method("WallpaperSettingsPanel", "_set_studio_workspace")
+    assert "wx.Size(450, 410 if name == 'Processing' else 265)" in switch
+    assert "wx.Size(10000, 480 if name == 'Processing' else 295)" in switch
     preview = _method("WallpaperPreviewPanel", "__init__")
     assert "self.preview_size = (1080, 265)" in preview
 
@@ -160,35 +163,51 @@ def test_gallery_never_instantiates_hidden_workspace_cards():
 def test_processing_workspace_restores_selected_tab_visibility():
     switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
     assert "self._set_processing_tab(self._processing_tab)" in switching
-    assert "self._studio_refresh_processing_preview()" in switching
+    assert "self._processing_compare_initialized = True" in switching
+    assert "self.studio_compare.SetValue(True)" in switching
+    assert "self.studio_split_slider.Enable(True)" in switching
+    assert "self._studio_sync_compare_workspace(name)" in switching
     tabs = _method("WallpaperSettingsPanel", "_set_processing_tab")
     assert "recursive=True" in tabs
 
 
-def test_live_processing_comparison_is_local_and_updates_with_edits():
+def test_processing_uses_one_big_local_comparison_without_duplicate_panel():
     constructor = _method("WallpaperSettingsPanel", "create_studio_navigation")
-    assert "LIVE LOCAL COMPARISON" in constructor
-    assert "self.studio_processing_bitmap" in constructor
-    render = _method("WallpaperSettingsPanel", "_studio_refresh_processing_preview")
-    assert "self.wpprev_pnl.current_preview_images" in render
-    assert "ImageOps.exif_transpose" in render
-    assert "locally_sharpen(" in render
-    assert "apply_local_adjustments(" in render
-    assert "prepare_cloud_upscaled_image(" not in render
-    assert "apply_image_shader(" not in render
+    assert "LIVE LOCAL COMPARISON" not in constructor
+    assert "studio_processing_bitmap" not in constructor
+    layout = _method("WallpaperSettingsPanel", "__init__")
+    assert "studio_processing_preview" not in layout
+    redraw = _method("WallpaperPreviewPanel", "resize_and_bitmap")
+    assert "locally_sharpen(oriented, self.sharpen)" in redraw
+    assert "apply_local_adjustments(" in redraw
+    assert "split_local_preview(" in redraw
+    assert "prepare_cloud_upscaled_image(" not in redraw
+    assert "apply_image_shader(" not in redraw
     sharpen = _method("WallpaperSettingsPanel", "_on_cloud_quality_changed")
     tone = _method("WallpaperSettingsPanel", "_on_studio_tone_changed")
-    assert "self._studio_refresh_processing_preview()" in sharpen
-    assert "self._studio_refresh_processing_preview()" in tone
+    assert "self.wpprev_pnl.update_zoom_offset(" in sharpen
+    assert "self.wpprev_pnl.update_zoom_offset(" in tone
 
 
-def test_local_comparison_resizes_instead_of_forcing_a_wide_window():
-    painter = _method("StudioComparisonPanel", "_paint")
-    assert "source.GetWidth()" in painter
-    assert "source.GetHeight()" in painter
-    assert "scale = min(" in painter
-    constructor = _method("WallpaperSettingsPanel", "create_studio_navigation")
-    assert "self.studio_processing_bitmap = StudioComparisonPanel(self)" in constructor
+def test_draggable_handle_is_preview_only_and_keeps_slider_in_sync():
+    paint = _method("WallpaperPreviewPanel", "_paint_comparison_handles")
+    assert "self._draw_comparison_handle(" in paint
+    bitmap = _method("WallpaperPreviewPanel", "preview_wallpaper")
+    assert "self._comparison_crops" in bitmap
+    assert "self._paint_comparison_handles()" in bitmap
+    desktop = _method("WallpaperPreviewPanel", "_update_desktop_preview")
+    assert "self._draw_comparison_handle(" in desktop
+    down = _method("WallpaperPreviewPanel", "_on_background_down")
+    assert "comparison_hit_region(" in down
+    assert "self._comparison_drag" in down
+    assert "self._drag_target(point)" in down
+    motion = _method("WallpaperPreviewPanel", "_on_background_motion")
+    assert "comparison_drag_fraction(" in motion
+    assert "self.frame._studio_drag_split_handle(" in motion
+    drag = _method("WallpaperSettingsPanel", "_studio_drag_split_handle")
+    assert "self.studio_split_slider.SetValue(position)" in drag
+    assert "self._studio_compare_position(None)" in drag
+    assert "prepare_cloud_upscaled_image" not in drag
 
 
 def test_preview_help_button_uses_native_theme_size_without_gtk_overflow():
