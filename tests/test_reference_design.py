@@ -171,3 +171,12 @@ def test_live_processing_comparison_is_local_and_updates_with_edits():
     tone = _method("WallpaperSettingsPanel", "_on_studio_tone_changed")
     assert "self._studio_refresh_processing_preview()" in sharpen
     assert "self._studio_refresh_processing_preview()" in tone
+
+
+def test_local_comparison_resizes_instead_of_forcing_a_wide_window():
+    painter = _method("StudioComparisonPanel", "_paint")
+    assert "source.GetWidth()" in painter
+    assert "source.GetHeight()" in painter
+    assert "scale = min(" in painter
+    constructor = _method("WallpaperSettingsPanel", "create_studio_navigation")
+    assert "self.studio_processing_bitmap = StudioComparisonPanel(self)" in constructor
