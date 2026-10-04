@@ -249,8 +249,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.wpprev_pnl = WallpaperPreviewPanel(self, self.display_sys)
         # A panorama must fill the useful height of the stage instead of
         # sitting as a thin strip in an oversized black rectangle.
-        self.wpprev_pnl.SetMinSize(wx.Size(450, 315))
-        self.wpprev_pnl.SetMaxSize(wx.Size(10000, 365))
+        self.wpprev_pnl.SetMinSize(wx.Size(450, 265))
+        self.wpprev_pnl.SetMaxSize(wx.Size(10000, 295))
         self.sizer_top_half.Add(self.wpprev_pnl, 1, wx.EXPAND | wx.ALL, 5)
         # self.sizer_top_half.SetMinSize((400,200))
         # self.sizer_top_half.SetMinSize()
@@ -305,7 +305,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Add(self.studio_display_editor, 0, wx.EXPAND | wx.ALL, 7)
         self.studio_canvas_column.Hide(self.studio_display_editor, recursive=True)
         self.studio_canvas_column.Add(self.studio_source_tools, 0, wx.EXPAND | wx.ALL, 8)
-        self.studio_canvas_column.Add(self.studio_quick_profiles, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 12)
+        self.studio_canvas_column.Add(self.studio_quick_profiles, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 6)
         self.studio_canvas_column.Add(self.sizer_settings_right, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.studio_canvas_column.Hide(self.sizer_settings_right, recursive=True)
         self.studio_canvas_column.Add(self.sizer_gallery, 1, wx.EXPAND | wx.ALL, 7)
@@ -314,7 +314,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_editor_row.Add(wx.StaticLine(self, style=wx.LI_VERTICAL), 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 8)
 
         self.studio_inspector = wx.BoxSizer(wx.VERTICAL)
-        self.studio_inspector.SetMinSize(wx.Size(328, -1))
+        self.studio_inspector.SetMinSize(wx.Size(294, -1))
         self.studio_inspector.Add(self.studio_workspace_title, 0, wx.EXPAND | wx.ALL, 9)
         self.studio_inspector.Add(self.studio_image_card, 0, wx.EXPAND | wx.ALL, 7)
         self.studio_inspector.Add(self.studio_fit_row, 0, wx.EXPAND | wx.ALL, 7)
@@ -900,7 +900,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def create_studio_navigation(self):
         """Persistent navigation, status, and image preview controls."""
-        self.studio_sidebar = wx.Panel(self, size=wx.Size(174, -1))
+        self.studio_sidebar = wx.Panel(self, size=wx.Size(162, -1))
         self.studio_sidebar.SetBackgroundColour(wx.Colour(25, 34, 48))
         column = wx.BoxSizer(wx.VERTICAL)
         heading = wx.StaticText(self.studio_sidebar, label="SUPERPAPER\nNEXT")
@@ -1043,9 +1043,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
         self.studio_image_card = wx.BoxSizer(wx.VERTICAL)
         self.studio_image_card.Add(wx.StaticText(self, label="IMAGE & PLACEMENT"), 0, wx.EXPAND | wx.BOTTOM, 8)
-        empty_image = Image.new("RGB", (300, 103), (25, 33, 44))
+        empty_image = Image.new("RGB", (266, 94), (25, 33, 44))
         self.studio_image_thumbnail = wx.StaticBitmap(
-            self, bitmap=wx.Bitmap.FromBuffer(300, 103, empty_image.tobytes())
+            self, bitmap=wx.Bitmap.FromBuffer(266, 94, empty_image.tobytes())
         )
         self.studio_image_card.Add(self.studio_image_thumbnail, 0, wx.EXPAND | wx.BOTTOM, 6)
         self.studio_image_name = wx.StaticText(self, label="No image selected")
@@ -1115,6 +1115,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.studio_canvas_column.Show(self.sizer_gallery, show=name == "Profiles", recursive=True)
         self.studio_workspace_title.SetLabel(name.upper())
+        # Avoid duplicating WALLPAPERS above IMAGE & PLACEMENT.
+        self.studio_inspector.Show(self.studio_workspace_title, show=name != "Wallpapers")
         self.studio_header_title.SetLabel(name)
         descriptions = {
             "Wallpapers": "Select an image and adjust how it fits across your monitors.",
@@ -1161,23 +1163,23 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             return
         images = self.wpprev_pnl.current_preview_images
         path = images[0] if images else ""
-        canvas = Image.new("RGB", (300, 103), (25, 33, 44))
+        canvas = Image.new("RGB", (266, 94), (25, 33, 44))
         if path and os.path.isfile(path):
             try:
                 with Image.open(path) as image:
                     source = ImageOps.exif_transpose(image)
-                    source.thumbnail((300, 103), Image.Resampling.LANCZOS)
+                    source.thumbnail((266, 94), Image.Resampling.LANCZOS)
                     if source.mode == "RGBA":
-                        canvas.paste(source, ((300 - source.width) // 2, (103 - source.height) // 2), source)
+                        canvas.paste(source, ((266 - source.width) // 2, (94 - source.height) // 2), source)
                     else:
-                        canvas.paste(source.convert("RGB"), ((300 - source.width) // 2, (103 - source.height) // 2))
+                        canvas.paste(source.convert("RGB"), ((266 - source.width) // 2, (94 - source.height) // 2))
                 self.studio_image_name.SetLabel(os.path.basename(path))
                 self.studio_image_name.SetToolTip(path)
             except OSError, ValueError:
                 self.studio_image_name.SetLabel("Image unavailable")
         else:
             self.studio_image_name.SetLabel("No image selected")
-        self.studio_image_thumbnail.SetBitmap(wx.Bitmap.FromBuffer(300, 103, canvas.tobytes()))
+        self.studio_image_thumbnail.SetBitmap(wx.Bitmap.FromBuffer(266, 94, canvas.tobytes()))
 
     def _studio_focus_display(self, number):
         self.studio_monitor_choice.SetSelection(number)
@@ -1244,7 +1246,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_gallery_scroller.SetScrollRate(0, 16)
         self.studio_gallery_scroller.SetMinSize(wx.Size(550, 365))
         self.studio_gallery_scroller.SetBackgroundColour(wx.Colour(19, 31, 47))
-        self.studio_gallery_cards = wx.WrapSizer(wx.HORIZONTAL)
+        self.studio_gallery_cards = wx.WrapSizer(wx.HORIZONTAL, flags=0)
         self.studio_gallery_scroller.SetSizer(self.studio_gallery_cards)
         self.sizer_gallery.Add(self.studio_gallery_scroller, 1, wx.EXPAND | wx.ALL, 5)
 
@@ -1268,7 +1270,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         all_profiles.Bind(wx.EVT_BUTTON, lambda event: self._set_studio_workspace("Profiles"))
         quick_header.Add(all_profiles, 0, wx.RIGHT, 5)
         self.studio_quick_profiles.Add(quick_header, 0, wx.EXPAND)
-        self.studio_quick_profile_row = wx.WrapSizer(wx.HORIZONTAL)
+        self.studio_quick_profile_row = wx.WrapSizer(wx.HORIZONTAL, flags=0)
         self.studio_quick_profiles.Add(self.studio_quick_profile_row, 0, wx.EXPAND | wx.TOP, 6)
         self._building_gallery = False
 
@@ -1294,7 +1296,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         background = wx.Colour(31, 83, 139) if selected else wx.Colour(32, 46, 65)
         card = wx.Panel(parent, style=wx.BORDER_NONE)
         card.SetBackgroundColour(background)
-        card.SetMinSize(wx.Size(width + 18, height + 65))
+        card.SetMinSize(wx.Size(width + 18, height + 85))
         card_sizer = wx.BoxSizer(wx.VERTICAL)
         picture = wx.StaticBitmap(card, bitmap=self._studio_profile_thumbnail(profile, width, height))
         card_sizer.Add(picture, 0, wx.ALL, 9)
@@ -2884,7 +2886,7 @@ class WallpaperPreviewPanel(wx.Panel):
     """
 
     def __init__(self, parent, display_sys, image_list=None, use_ppi_px=False, use_multi_image=False):
-        self.preview_size = (1080, 315)
+        self.preview_size = (1080, 265)
         wx.Panel.__init__(self, parent, size=wx.Size(*self.preview_size))
         self.frame = parent
 
