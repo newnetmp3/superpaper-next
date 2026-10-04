@@ -12,7 +12,12 @@ GUI = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
 
 
 def _method(class_name, method):
-    tree = ast.parse(GUI.read_text(encoding="utf-8"))
+    source = GUI
+    if class_name == "WallpaperPreviewPanel":
+        source = GUI.with_name("wallpaper_preview_panel.py")
+    elif class_name in ("StudioNavigationButton", "StudioActionButton", "StudioSegmentButton"):
+        source = GUI.with_name("studio_widgets.py")
+    tree = ast.parse(source.read_text(encoding="utf-8"))
     owner = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name)
     matches = [node for node in owner.body if isinstance(node, ast.FunctionDef) and node.name == method]
     return ast.unparse(matches[-1])
