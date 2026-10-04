@@ -48,6 +48,7 @@ from superpaper.preview_geometry import (
 )
 from superpaper.profile_id import ProfileId, ProfileIdError
 from superpaper.source_paths import IMAGE_EXTENSIONS, resolved_wallpaper_selections, source_identity
+from superpaper.studio_widgets import StudioActionButton, StudioNavigationButton, StudioSegmentButton
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
 from superpaper.wallpaper_processing import (
     change_wallpaper_job,
@@ -60,7 +61,6 @@ try:
 except ImportError:
     sys.exit()
 
-from superpaper.studio_widgets import StudioActionButton, StudioNavigationButton, StudioSegmentButton
 
 
 
