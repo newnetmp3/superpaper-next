@@ -3748,9 +3748,7 @@ class WallpaperPreviewPanel(wx.Panel):
         # redraw preview with restored data
         self.display_data = self.display_sys.get_disp_list(True)
         self.refresh_preview(True)
-        self.full_refresh_preview(
-            True, True, self.frame.use_multi_image, spangroups=self.frame.read_spangroups(True)
-        )
+        self.full_refresh_preview(True, True, self.frame.use_multi_image, spangroups=self.frame.read_spangroups(True))
         self.set_desktop_layout(getattr(self, "_desktop_layout_before_config", False))
         self.frame.studio_desktop_layout.Enable(self.frame._workspace != "Displays")
         self.frame.toggle_radio_and_profile_choice(True)
