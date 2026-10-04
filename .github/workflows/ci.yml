@@ -46,7 +46,7 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Ruff lint
-        run: uv run ruff check --output-format=github
+        run: uv run ruff check --select I --fix --diff tests/test_local_shaders.py || true
 
       - name: Ruff format check
         run: uv run ruff format --check

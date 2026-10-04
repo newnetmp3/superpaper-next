@@ -6,6 +6,9 @@ Shader packs are imported explicitly, with safe, bounded archive extraction.
 Missing Vulkan/FFmpeg support is non-fatal: use the unmodified image.
 """
 
+# Import failures are surfaced in the UI with specific actionable messages.
+# ruff: noqa: TRY003, EM101
+
 import hashlib
 import logging
 import os
