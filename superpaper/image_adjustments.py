@@ -42,10 +42,12 @@ def split_local_preview(original, adjusted, fraction, *, has_adjustments=False):
     are strictly preview-only and are not saved to the wallpaper.
     """
     if original.size != adjusted.size:
-        raise ValueError("Comparison images must have identical dimensions.")
+        message = "Comparison images must have identical dimensions."
+        raise ValueError(message)
     width, height = original.size
     if width <= 0 or height <= 0:
-        raise ValueError("Comparison images must have positive dimensions.")
+        message = "Comparison images must have positive dimensions."
+        raise ValueError(message)
 
     position = round(width * max(0.0, min(1.0, float(fraction))))
     result = adjusted.convert("RGB").copy()
