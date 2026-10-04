@@ -36,6 +36,8 @@ from superpaper.image_adjustments import apply_local_adjustments, normalize_adju
 from superpaper.local_shaders import ShaderImportError, available_shaders, import_shader_pack, normalize_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import (
+    comparison_drag_fraction,
+    comparison_hit_region,
     crop_overflow,
     desktop_preview_layout,
     fit_preview_canvas,
@@ -170,35 +172,6 @@ class StudioSegmentButton(StudioActionButton):
         super().SetSelected(selected)
 
 
-class StudioComparisonPanel(wx.Panel):
-    """Paint a local image comparison at the available workspace width."""
-
-    def __init__(self, parent):
-        super().__init__(parent, style=wx.BORDER_NONE)
-        self.SetMinSize(wx.Size(300, 170))
-        self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
-        self._comparison = None
-        self.Bind(wx.EVT_PAINT, self._paint)
-
-    def SetComparison(self, bitmap):
-        self._comparison = bitmap
-        self.Refresh()
-
-    def _paint(self, event):
-        dc = wx.AutoBufferedPaintDC(self)
-        width, height = self.GetClientSize()
-        dc.SetBackground(wx.Brush(wx.Colour(25, 34, 48)))
-        dc.Clear()
-        if self._comparison is None or width < 1 or height < 1:
-            return
-        source = self._comparison
-        scale = min(width / source.GetWidth(), height / source.GetHeight())
-        display_width = max(1, round(source.GetWidth() * scale))
-        display_height = max(1, round(source.GetHeight() * scale))
-        image = source.ConvertToImage().Scale(display_width, display_height, wx.IMAGE_QUALITY_HIGH)
-        dc.DrawBitmap(image.ConvertToBitmap(), (width - display_width) // 2, (height - display_height) // 2)
-
-
 class ConfigFrame(wx.Frame):
     """Wallpaper configuration dialog frame base class."""
 
@@ -293,7 +266,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         # A panorama must fill the useful height of the stage instead of
         # sitting as a thin strip in an oversized black rectangle.
         self.wpprev_pnl.SetMinSize(wx.Size(450, 265))
-        self.wpprev_pnl.SetMaxSize(wx.Size(10000, 295))
+        self.wpprev_pnl.SetMaxSize(wx.Size(10000, 480))
         self.sizer_top_half.Add(self.wpprev_pnl, 1, wx.EXPAND | wx.ALL, 5)
         # self.sizer_top_half.SetMinSize((400,200))
         # self.sizer_top_half.SetMinSize()
@@ -349,8 +322,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Hide(self.studio_display_editor, recursive=True)
         self.studio_canvas_column.Add(self.studio_source_tools, 0, wx.EXPAND | wx.ALL, 8)
         self.studio_canvas_column.Add(self.studio_quick_profiles, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 6)
-        self.studio_canvas_column.Add(self.studio_processing_preview, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 12)
-        self.studio_canvas_column.Hide(self.studio_processing_preview, recursive=True)
         self.studio_canvas_column.Add(self.sizer_settings_right, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.studio_canvas_column.Hide(self.sizer_settings_right, recursive=True)
         self.studio_canvas_column.Add(self.sizer_gallery, 1, wx.EXPAND | wx.ALL, 7)
@@ -381,6 +352,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_main.Add(self.sizer_bottom_half, 1, wx.EXPAND)
         self.SetSizer(self.sizer_main)
         self._workspace = None
+        self._processing_compare_initialized = False
         self._set_studio_workspace("Wallpapers")
         self.FitInside()
 
@@ -1033,7 +1005,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_compare.Bind(wx.EVT_CHECKBOX, self._studio_toggle_compare)
         self.studio_compare_row.Add(self.studio_compare, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
         self.studio_split_slider = wx.Slider(self, value=50, minValue=0, maxValue=100, size=wx.Size(130, -1))
-        self.studio_split_slider.SetToolTip("Move the dividing line between original and locally adjusted preview.")
+        self.studio_split_slider.SetToolTip(
+            "Move the dividing line, or drag the blue handle directly on the wallpaper preview."
+        )
         self.studio_split_slider.Enable(False)
         self.studio_split_slider.Bind(wx.EVT_SLIDER, self._studio_compare_position)
         self.studio_compare_row.Add(self.studio_split_slider, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
@@ -1126,27 +1100,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self._sources_expanded = False
 
-        # A dedicated local before/after image makes real use of the Processing
-        # workspace. Never call the cloud upscaler or Vulkan renderer here.
-        self.studio_processing_preview = wx.BoxSizer(wx.VERTICAL)
-        processing_heading = wx.StaticText(self, label="LIVE LOCAL COMPARISON")
-        processing_heading.SetForegroundColour(wx.Colour(227, 238, 253))
-        self.studio_processing_preview.Add(processing_heading, 0, wx.BOTTOM, 6)
-        comparison_labels = wx.BoxSizer(wx.HORIZONTAL)
-        comparison_labels.Add(wx.StaticText(self, label="Original image"), 1, wx.EXPAND)
-        comparison_labels.Add(wx.StaticText(self, label="After local adjustments"), 1, wx.EXPAND)
-        self.studio_processing_preview.Add(comparison_labels, 0, wx.EXPAND | wx.BOTTOM, 5)
-        self.studio_processing_bitmap = StudioComparisonPanel(self)
-        self.studio_processing_preview.Add(self.studio_processing_bitmap, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 4)
-        local_note = wx.StaticText(
-            self,
-            label="Brightness, contrast, saturation and sharpening are previewed locally. "
-            "Cloud AI and GPU shaders render when you Apply.",
-        )
-        local_note.SetForegroundColour(wx.Colour(171, 193, 221))
-        local_note.Wrap(740)
-        self.studio_processing_preview.Add(local_note, 0, wx.EXPAND | wx.TOP, 8)
-
         self.studio_image_card = wx.BoxSizer(wx.VERTICAL)
         self.studio_image_card.Add(wx.StaticText(self, label="IMAGE & PLACEMENT"), 0, wx.EXPAND | wx.BOTTOM, 8)
         empty_image = Image.new("RGB", (266, 94), (25, 33, 44))
@@ -1207,8 +1160,18 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_displays.Show(
             self.sizer_setting_adv, show=name == "Displays" and self.show_advanced_settings, recursive=True
         )
+        # Reclaim the removed comparison pane's vertical space for the real
+        # multi-monitor preview in Processing, while keeping other tabs compact.
+        self.wpprev_pnl.SetMinSize(wx.Size(450, 410 if name == "Processing" else 265))
+        self.wpprev_pnl.SetMaxSize(wx.Size(10000, 480 if name == "Processing" else 295))
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles", recursive=True)
+        # Comparison starts enabled on the first Processing visit. Explicit
+        # later user changes remain respected when switching back and forth.
+        if name == "Processing" and not self._processing_compare_initialized:
+            self._processing_compare_initialized = True
+            self.studio_compare.SetValue(True)
+            self.studio_split_slider.Enable(True)
         self._studio_sync_compare_workspace(name)
         self.studio_desktop_layout.Enable(name != "Displays")
         self.wpprev_pnl.set_desktop_layout(
@@ -1216,7 +1179,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
         self.studio_canvas_column.Show(self.studio_quick_profiles, show=name == "Wallpapers", recursive=True)
-        self.studio_canvas_column.Show(self.studio_processing_preview, show=name == "Processing", recursive=True)
         self.studio_canvas_column.Show(self.studio_alignment_tools, show=name == "Wallpapers", recursive=True)
         self.sizer_bottom_half.Show(self.sizer_profiles, show=name == "Profiles", recursive=True)
         self.studio_canvas_column.Show(self.studio_display_editor, show=name == "Displays", recursive=True)
@@ -1242,7 +1204,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         # from inactive sub-tabs. Restore the selected tab's child visibility.
         if name == "Processing":
             self._set_processing_tab(self._processing_tab)
-            self._studio_refresh_processing_preview()
         if name in ("Wallpapers", "Profiles"):
             self._refresh_profile_gallery()
         self.studio_canvas_column.Layout()
@@ -1361,6 +1322,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.wpprev_pnl.compare_fraction = self.studio_split_slider.GetValue() / 100.0
         if self.wpprev_pnl.compare_original:
             self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+
+    def _studio_drag_split_handle(self, fraction):
+        """Synchronize the image drag handle and toolbar slider locally."""
+        position = max(0, min(100, round(fraction * 100)))
+        if position != self.studio_split_slider.GetValue():
+            self.studio_split_slider.SetValue(position)
+            self._studio_compare_position(None)
 
     def _refresh_studio_monitor_options(self):
         count = len(self.display_sys.disp_list)
@@ -1493,37 +1461,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 self.studio_canvas_column.Layout()
         finally:
             self._building_gallery = False
-
-    def _studio_refresh_processing_preview(self):
-        """Live original/adjusted comparison using only local Pillow effects."""
-        if getattr(self, "_workspace", None) != "Processing":
-            return
-        images = self.wpprev_pnl.current_preview_images
-        path = images[0] if images else ""
-        canvas = Image.new("RGB", (720, 168), (25, 34, 48))
-        if path and os.path.isfile(path):
-            try:
-                with Image.open(path) as source:
-                    oriented = ImageOps.exif_transpose(source).convert("RGB")
-                    original = resize_to_fill(
-                        oriented,
-                        (356, 168),
-                        quality="fast",
-                        zoom=self.wpprev_pnl.zoom,
-                        offset=self.wpprev_pnl.offset,
-                    )
-                sharpened = locally_sharpen(original, self.wpprev_pnl.sharpen)
-                after = apply_local_adjustments(
-                    sharpened,
-                    brightness=self.wpprev_pnl.tone[0],
-                    contrast=self.wpprev_pnl.tone[1],
-                    saturation=self.wpprev_pnl.tone[2],
-                )
-                canvas.paste(original.convert("RGB"), (0, 0))
-                canvas.paste(after.convert("RGB"), (364, 0))
-            except OSError, ValueError, UnidentifiedImageError:
-                pass
-        self.studio_processing_bitmap.SetComparison(wx.Bitmap.FromBuffer(720, 168, canvas.tobytes()))
 
     def _studio_select_profile(self, name):
         """Use the same profile selection logic as the normal dropdown."""
@@ -2117,7 +2054,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         if value != self.wpprev_pnl.sharpen:
             self.wpprev_pnl.sharpen = value
             self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
-        self._studio_refresh_processing_preview()
         self._studio_update_compare_feedback()
         self._update_dirty_state()
 
@@ -2183,7 +2119,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.studio_tone_labels[key].SetLabel(str(value))
         self.wpprev_pnl.tone = tone
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
-        self._studio_refresh_processing_preview()
         self._studio_update_compare_feedback()
         self._update_dirty_state()
 
@@ -2227,7 +2162,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.st_offx_val.SetLabel(str(offx_pct))
         self.st_offy_val.SetLabel(str(offy_pct))
         self.wpprev_pnl.update_zoom_offset(zoom_pct / 100.0, (offx_pct / 100.0, offy_pct / 100.0))
-        self._studio_refresh_processing_preview()
         self._update_dirty_state()
 
     def onResize(self, event):
@@ -3144,6 +3078,8 @@ class WallpaperPreviewPanel(wx.Panel):
         self._last_use_multi = use_multi_image
         self._last_spangroups = None
         self._background_drag = None
+        self._comparison_drag = None
+        self._comparison_crops = []
         self.desktop_layout_enabled = False
         self._raw_preview_bmps = []
 
@@ -3346,6 +3282,7 @@ class WallpaperPreviewPanel(wx.Panel):
         self.refresh_preview(use_ppi_px)
         image_list = self.current_preview_images
         if not image_list:
+            self._comparison_crops = []
             self.desktop_preview.Hide()
             self.resize_displays(use_ppi_px)
             self.Refresh()
@@ -3358,12 +3295,14 @@ class WallpaperPreviewPanel(wx.Panel):
                 rect.SetRight(bm.GetWidth() - 1)
             return bm.GetSubBitmap(rect)
 
+        self._comparison_crops = [None] * len(self.preview_img_list)
         if use_multi_image:
             while len(image_list) < len(self.preview_img_list):
                 image_list.append(image_list[0])
-            for img_nm, st_bmp in zip(image_list, self.preview_img_list):
+            for index, (img_nm, st_bmp) in enumerate(zip(image_list, self.preview_img_list)):
                 prev_sz = st_bmp.GetSize()
                 st_bmp.SetBitmap(self.resize_and_bitmap(img_nm, prev_sz))
+                self._comparison_crops[index] = (0, prev_sz[0], prev_sz[0])
         elif use_ppi_px and spangroups:
             self.use_multi_image = True  # disables canvas drawing
             # for each group of displays, run span wallpaper preview
@@ -3376,14 +3315,15 @@ class WallpaperPreviewPanel(wx.Panel):
 
                 canv_sz, canvas_pos = self.canvas_display_group(display_rel_sizes, (0, 0))
                 bmp_clr, bmp_bw = self.resize_and_bitmap(img_nm, canv_sz, True)
-                for disp, img_sz, bez_szs, st_bmp in zip(
-                    display_rel_sizes, img_rel_sizes, bz_rel_sizes, preview_img_list
+                for index, disp, img_sz, bez_szs, st_bmp in zip(
+                    grp, display_rel_sizes, img_rel_sizes, bz_rel_sizes, preview_img_list
                 ):
                     sz = disp[0]
                     pos = (disp[1][0] - canvas_pos[0], disp[1][1] - canvas_pos[1])
                     crop = safe_sub_bitmap(bmp_clr, wx.Rect(pos, img_sz))
                     crop_w_bez = self.bezels_to_bitmap(crop, sz, bez_szs)
                     st_bmp.SetBitmap(crop_w_bez)
+                    self._comparison_crops[index] = (pos[0], img_sz[0], canv_sz[0])
         elif use_ppi_px and not spangroups:
             img = image_list[0]
             # set canvas to fit with keeping aspect the image, with dim/blur
@@ -3395,14 +3335,15 @@ class WallpaperPreviewPanel(wx.Panel):
             # self.st_bmp_canvas.Show()
 
             canvas_pos = self.dtop_canvas_pos
-            for disp, img_sz, bez_szs, st_bmp in zip(
-                self.display_rel_sizes, self.img_rel_sizes, self.bz_rel_sizes, self.preview_img_list
+            for index, (disp, img_sz, bez_szs, st_bmp) in enumerate(
+                zip(self.display_rel_sizes, self.img_rel_sizes, self.bz_rel_sizes, self.preview_img_list)
             ):
                 sz = disp[0]
                 pos = (disp[1][0] - canvas_pos[0], disp[1][1] - canvas_pos[1])
                 crop = safe_sub_bitmap(bmp_clr, wx.Rect(pos, img_sz))
                 crop_w_bez = self.bezels_to_bitmap(crop, sz, bez_szs)
                 st_bmp.SetBitmap(crop_w_bez)
+                self._comparison_crops[index] = (pos[0], img_sz[0], canv_sz[0])
                 # st_bmp.Show()
         else:
             img = image_list[0]
@@ -3414,20 +3355,81 @@ class WallpaperPreviewPanel(wx.Panel):
             # self.st_bmp_canvas.Show()
 
             canvas_pos = self.dtop_canvas_pos
-            for disp, st_bmp in zip(self.display_rel_sizes, self.preview_img_list):
+            for index, (disp, st_bmp) in enumerate(zip(self.display_rel_sizes, self.preview_img_list)):
                 sz = disp[0]
                 pos = (disp[1][0] - canvas_pos[0], disp[1][1] - canvas_pos[1])
                 crop = safe_sub_bitmap(bmp_clr, wx.Rect(pos, sz))
                 st_bmp.SetBitmap(crop)
+                self._comparison_crops[index] = (pos[0], sz[0], canv_sz[0])
                 # st_bmp.Show()
         # Preserve the unlabelled per-monitor images. The virtual desktop
         # preview repositions these same crops at actual OS monitor offsets.
         self._raw_preview_bmps = [wx.Bitmap(bitmap.GetBitmap().ConvertToImage()) for bitmap in self.preview_img_list]
+        if self.compare_original:
+            self._paint_comparison_handles()
         for index, bitmap in enumerate(self.preview_img_list):
             bitmap.Show(self.focus_monitor == 0 or index == self.focus_monitor - 1)
         self.draw_monitor_numbers(use_ppi_px)
         self._update_desktop_preview()
         self.Refresh()
+
+    def _comparison_regions(self, *, desktop=False):
+        """Map each displayed monitor back to its original split canvas."""
+        if desktop:
+            try:
+                rectangles = self._desktop_preview_rectangles()[2]
+            except ValueError:
+                return []
+        else:
+            rectangles = [
+                (*bitmap.GetPosition(), *bitmap.GetSize()) for bitmap in self.preview_img_list
+            ]
+        regions = []
+        for index, (left, top, width, height) in enumerate(rectangles):
+            if index >= len(self._comparison_crops):
+                break
+            crop = self._comparison_crops[index]
+            if crop is None or (self.focus_monitor and index != self.focus_monitor - 1):
+                continue
+            crop_left, crop_width, canvas_width = crop
+            # PPI previews can include a bezel area after the image pixels.
+            bitmap_width = self.preview_img_list[index].GetSize()[0]
+            if desktop and bitmap_width > 0:
+                width = width * crop_width / bitmap_width
+            else:
+                width = min(width, crop_width)
+            if width > 0 and height > 0:
+                regions.append((left, top, width, height, crop_left, crop_width, canvas_width))
+        return regions
+
+    @staticmethod
+    def _draw_comparison_handle(dc, x, y):
+        """Paint a small grabbable blue handle over the preview-only divider."""
+        center_x, center_y = round(x), round(y)
+        dc.SetPen(wx.Pen(wx.Colour(96, 190, 255), 2))
+        dc.SetBrush(wx.Brush(wx.Colour(23, 48, 78)))
+        dc.DrawCircle(center_x, center_y, 14)
+        dc.SetPen(wx.Pen(wx.Colour(232, 247, 255), 2))
+        for direction in (-1, 1):
+            dc.DrawLine(center_x + direction * 5, center_y - 5, center_x + direction * 9, center_y)
+            dc.DrawLine(center_x + direction * 9, center_y, center_x + direction * 5, center_y + 5)
+
+    def _paint_comparison_handles(self):
+        """Overlay grips on the displayed bitmap, never on saved wallpapers."""
+        for index, bitmap in enumerate(self.preview_img_list):
+            if index >= len(self._comparison_crops) or self._comparison_crops[index] is None:
+                continue
+            crop_left, crop_width, canvas_width = self._comparison_crops[index]
+            divider = self.compare_fraction * canvas_width - crop_left
+            if not 0 <= divider <= crop_width:
+                continue
+            image = bitmap.GetBitmap()
+            dc = wx.MemoryDC(image)
+            try:
+                self._draw_comparison_handle(dc, divider, image.GetHeight() / 2)
+            finally:
+                dc.SelectObject(wx.NullBitmap)
+            bitmap.SetBitmap(image)
 
     def set_desktop_layout(self, enabled):
         """Switch between final OS geometry and the physical calibration view."""
@@ -3472,6 +3474,13 @@ class WallpaperPreviewPanel(wx.Panel):
                 dc.DrawRoundedRectangle(x - canvas_pos[0] + 6, y - canvas_pos[1] + 7, label_w + 15, label_h + 9, 4)
                 dc.SetTextForeground(wx.Colour(245, 249, 255))
                 dc.DrawText(label, x - canvas_pos[0] + 13, y - canvas_pos[1] + 11)
+            if self.compare_original:
+                for left, top, width, height, crop_left, crop_width, canvas_width in self._comparison_regions(
+                    desktop=True
+                ):
+                    divider = left + (self.compare_fraction * canvas_width - crop_left) * width / crop_width
+                    if left <= divider <= left + width:
+                        self._draw_comparison_handle(dc, divider - canvas_pos[0], top + height / 2 - canvas_pos[1])
         finally:
             dc.SelectObject(wx.NullBitmap)
         self.desktop_preview.SetBitmap(output)
@@ -4098,10 +4107,21 @@ class WallpaperPreviewPanel(wx.Panel):
         return None
 
     def _on_background_down(self, event):
+        point = self._preview_mouse_position(event)
+        if self.compare_original and not (self.config_mode or self.bezel_conifg_mode):
+            pixels = comparison_hit_region(
+                self._comparison_regions(desktop=self.desktop_layout_enabled and self.desktop_preview.IsShown()),
+                (point.x, point.y),
+                self.compare_fraction,
+            )
+            if pixels is not None:
+                self._comparison_drag = (point.x, self.compare_fraction, pixels)
+                self.CaptureMouse()
+                self.SetCursor(wx.Cursor(wx.CURSOR_SIZEWE))
+                return
         if not (self.frame.sld_offx.IsEnabled() and self.frame.sld_offy.IsEnabled()):
             event.Skip()
             return
-        point = self._preview_mouse_position(event)
         target = self._drag_target(point)
         if target is None:
             event.Skip()
@@ -4121,6 +4141,12 @@ class WallpaperPreviewPanel(wx.Panel):
         self.SetCursor(wx.Cursor(wx.CURSOR_HAND))
 
     def _on_background_motion(self, event):
+        if self._comparison_drag is not None:
+            if event.LeftIsDown():
+                start_x, fraction, pixels = self._comparison_drag
+                point = self._preview_mouse_position(event)
+                self.frame._studio_drag_split_handle(comparison_drag_fraction(fraction, point.x - start_x, pixels))
+            return
         if self._background_drag is None or not event.LeftIsDown():
             event.Skip()
             return
@@ -4130,18 +4156,20 @@ class WallpaperPreviewPanel(wx.Panel):
         self.frame.on_wallpaper_dragged(pan_offset_for_drag(offsets, moved, overflow))
 
     def _finish_background_drag(self):
+        self._comparison_drag = None
         self._background_drag = None
         if self.HasCapture():
             self.ReleaseMouse()
         self.SetCursor(wx.NullCursor)
 
     def _on_background_up(self, event):
-        if self._background_drag is not None:
+        if self._comparison_drag is not None or self._background_drag is not None:
             self._finish_background_drag()
         else:
             event.Skip()
 
     def _on_background_capture_lost(self, event):
+        self._comparison_drag = None
         self._background_drag = None
         self.SetCursor(wx.NullCursor)
         event.Skip()
