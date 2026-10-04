@@ -8,13 +8,13 @@ Public Spaces have limited free compute and no availability guarantees; always
 return the original image on failure so wallpaper application still succeeds.
 """
 
+from contextlib import contextmanager
 import hashlib
 import logging
 import os
 import tempfile
 import threading
 import weakref
-from contextlib import contextmanager
 from pathlib import Path
 
 from PIL import Image, ImageEnhance
