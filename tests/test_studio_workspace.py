@@ -222,3 +222,26 @@ def test_preview_monitor_numbers_are_human_readable():
     resolutions = ast.unparse(_method("WallpaperPreviewPanel", "draw_monitor_sizes"))
     assert "disp.resolution[0]" in resolutions
     assert "disp.resolution[1]" in resolutions
+
+
+def test_advanced_profile_opens_physical_preview_without_positions_workaround():
+    load = ast.unparse(_method("WallpaperSettingsPanel", "populate_fields"))
+    change = ast.unparse(_method("WallpaperSettingsPanel", "onSpanRadio"))
+    for body in (load, change):
+        assert "self.studio_desktop_layout.SetValue(not self.show_advanced_settings)" in body
+        assert "self.wpprev_pnl.set_desktop_layout(" in body
+        assert "self.resized = True" in body
+
+
+def test_positions_cancel_and_save_restore_original_preview_preference():
+    start = ast.unparse(_method("WallpaperPreviewPanel", "onConfigure"))
+    cancel = ast.unparse(_method("WallpaperPreviewPanel", "onCancel"))
+    save = ast.unparse(_method("WallpaperPreviewPanel", "onSave"))
+    assert "self._desktop_layout_before_config = self.desktop_layout_enabled" in start
+    assert "self.frame.studio_desktop_layout.Disable()" in start
+    assert "self.frame.studio_desktop_layout.SetValue(False)" not in start
+    for body in (cancel, save):
+        assert "self.set_desktop_layout(getattr(self, '_desktop_layout_before_config', False))" in body
+        assert "self.frame.studio_desktop_layout.Enable(" in body
+        assert "self.frame.read_spangroups(True)" in body
+    assert "self.refresh_preview(True)" in cancel

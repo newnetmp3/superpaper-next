@@ -31,6 +31,7 @@ MAX_ARCHIVE_FILES = 128
 MAX_OUTPUT_PIXELS = 40_000_000
 MAX_INPUT_PIXELS = 16_000_000
 RENDER_TIMEOUT = 120
+_SHADER_RENDER_VARIANTS = ("direct", "hardware-upload")
 _SHADER_RE = re.compile(r"^Anime4K_[A-Za-z0-9_-]+[.]glsl$")
 
 
@@ -164,6 +165,30 @@ def shader_output_size(image_size, target_size, zoom, shader_name):
     return image_size[0] * scale, image_size[1] * scale
 
 
+def shader_filtergraph(dimensions, hook, variant):
+    """Build a Vulkan libplacebo graph compatible with recent and older FFmpeg.
+
+    Modern libplacebo handles software-frame upload/output itself. The older
+    hwupload/hwdownload route is kept as a fallback for distro FFmpeg builds
+    which require explicit hardware frames.
+    """
+    width, height = dimensions
+    effect = f"libplacebo=w={width}:h={height}:custom_shader_path={hook}"
+    if variant == "direct":
+        return effect + ":format=rgb24,format=rgb24"
+    if variant == "hardware-upload":
+        return f"format=rgba,hwupload,{effect},hwdownload,format=rgba"
+    raise ValueError("Unrecognized shader filter mode")
+
+
+def shader_error_detail(stderr):
+    """Preserve the first useful Vulkan/GLSL errors, not only FFmpeg's footer."""
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    if not lines:
+        return "No FFmpeg diagnostic output; verify FFmpeg libplacebo and Vulkan support."
+    return "\n".join((lines[:12] + lines[-4:]) if len(lines) > 16 else lines)[:4000]
+
+
 def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, shader_root=None):
     """Apply the chosen shader on the local Vulkan GPU; fail open to image.
 
@@ -189,7 +214,7 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
         digest = hashlib.sha256()
         digest.update(image.convert("RGB").tobytes())
         digest.update(shader.read_bytes())
-        digest.update(f"{name}:{dimensions}:libplacebo-v1".encode())
+        digest.update(f"{name}:{dimensions}:libplacebo-v2".encode())
         cache = Path(cache_root) if cache_root is not None else Path(tempfile.gettempdir())
         cache = cache / "local-shader-output" / (digest.hexdigest() + ".png")
         if cache.is_file():
@@ -208,34 +233,50 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
             hook = work / "shader.glsl"
             shutil.copyfile(shader, hook)
             image.convert("RGB").save(src)
-            width, height = dimensions
-            graph = (
-                f"format=rgba,hwupload,libplacebo=w={width}:h={height}:custom_shader_path={hook},hwdownload,format=rgba"
-            )
-            command = [
-                ffmpeg,
-                "-nostdin",
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-init_hw_device",
-                "vulkan=vk",
-                "-filter_hw_device",
-                "vk",
-                "-i",
-                str(src),
-                "-vf",
-                graph,
-                "-frames:v",
-                "1",
-                "-update",
-                "1",
-                str(output),
-            ]
-            result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=RENDER_TIMEOUT)
-            if result.returncode or not output.is_file():
-                LOGGER.warning("Anime4K shader render failed: %s", result.stderr[-1200:])
+            # Attempt the modern direct libplacebo software-frame input
+            # first. Not all FFmpeg builds support the explicit hwupload path
+            # previously used (which can fail during filter initialization).
+            rendered = False
+            for variant in _SHADER_RENDER_VARIANTS:
+                output.unlink(missing_ok=True)
+                command = [
+                    ffmpeg,
+                    "-nostdin",
+                    "-hide_banner",
+                    "-loglevel",
+                    "warning",
+                    "-y",
+                    "-init_hw_device",
+                    "vulkan=vk",
+                    "-filter_hw_device",
+                    "vk",
+                    "-i",
+                    str(src),
+                    "-vf",
+                    shader_filtergraph(dimensions, hook, variant),
+                    "-frames:v",
+                    "1",
+                    "-update",
+                    "1",
+                    str(output),
+                ]
+                result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=RENDER_TIMEOUT)
+                if result.returncode == 0 and output.is_file():
+                    rendered = True
+                    break
+                LOGGER.warning(
+                    "Anime4K shader %s (%s) failed (FFmpeg exit %s): %s",
+                    name,
+                    variant,
+                    result.returncode,
+                    shader_error_detail(result.stderr),
+                )
+            if not rendered:
+                LOGGER.warning(
+                    "Anime4K shader %s could not render using either FFmpeg path. "
+                    "Check ffmpeg -h filter=libplacebo for custom_shader_path and verify Vulkan via vulkaninfo.",
+                    name,
+                )
                 return image
             with Image.open(output) as rendered:
                 if rendered.size != dimensions:
