@@ -841,14 +841,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_source_tools.Add(self.studio_sources_toggle, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
         self.studio_source_tools.Add(
             wx.StaticText(self, label="Click and drag the monitor preview to reposition an image."),
-            0, wx.ALIGN_CENTER_VERTICAL,
+            0,
+            wx.ALIGN_CENTER_VERTICAL,
         )
         self._sources_expanded = False
 
         self.studio_image_card = wx.BoxSizer(wx.VERTICAL)
-        self.studio_image_card.Add(
-            wx.StaticText(self, label="IMAGE & PLACEMENT"), 0, wx.EXPAND | wx.BOTTOM, 8
-        )
+        self.studio_image_card.Add(wx.StaticText(self, label="IMAGE & PLACEMENT"), 0, wx.EXPAND | wx.BOTTOM, 8)
         empty_image = Image.new("RGB", (300, 103), (25, 33, 44))
         self.studio_image_thumbnail = wx.StaticBitmap(
             self, bitmap=wx.Bitmap.FromBuffer(300, 103, empty_image.tobytes())
@@ -861,9 +860,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_image_card.Add(self.studio_change_image, 0, wx.EXPAND)
 
         self.studio_fit_row = wx.BoxSizer(wx.VERTICAL)
-        self.studio_fit_row.Add(
-            wx.StaticText(self, label="Fit method"), 0, wx.BOTTOM, 5
-        )
+        self.studio_fit_row.Add(wx.StaticText(self, label="Fit method"), 0, wx.BOTTOM, 5)
         self.studio_fit_choice = wx.Choice(
             self, choices=["Span (keep aspect)", "Advanced span / bezels", "Separate per monitor"]
         )
@@ -874,9 +871,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_profile_inspector = wx.BoxSizer(wx.VERTICAL)
         self.studio_profile_inspector.Add(
             wx.StaticText(
-                self, label="Choose a thumbnail to load a profile.\n"
-                "Changes to the selected profile are editable in the other workspaces."
-            ), 0, wx.EXPAND | wx.ALL, 8,
+                self,
+                label="Choose a thumbnail to load a profile.\n"
+                "Changes to the selected profile are editable in the other workspaces.",
+            ),
+            0,
+            wx.EXPAND | wx.ALL,
+            8,
         )
         self.studio_profile_inspector.Add(self.button_save, 0, wx.EXPAND | wx.ALL, 5)
         self.studio_profile_inspector.Add(self.button_revert, 0, wx.EXPAND | wx.ALL, 5)
@@ -904,9 +905,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
-        self.studio_canvas_column.Show(
-            self.sizer_settings_right, show=name == "Wallpapers" and self._sources_expanded
-        )
+        self.studio_canvas_column.Show(self.sizer_settings_right, show=name == "Wallpapers" and self._sources_expanded)
         self.studio_canvas_column.Show(self.sizer_gallery, show=name == "Profiles")
         self.studio_workspace_title.SetLabel(name.upper())
         for key, button in self.studio_navigation.items():
@@ -927,9 +926,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
     def _studio_toggle_sources(self, event):
         """Expose full existing source manager only when the user needs it."""
         self._sources_expanded = not self._sources_expanded
-        self.studio_sources_toggle.SetLabel(
-            "Hide image sources" if self._sources_expanded else "Show image sources"
-        )
+        self.studio_sources_toggle.SetLabel("Hide image sources" if self._sources_expanded else "Show image sources")
         self.studio_canvas_column.Show(
             self.sizer_settings_right, show=self._sources_expanded and self._workspace == "Wallpapers"
         )
