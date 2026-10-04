@@ -48,8 +48,8 @@ from superpaper.preview_geometry import (
 )
 from superpaper.profile_id import ProfileId, ProfileIdError
 from superpaper.source_paths import IMAGE_EXTENSIONS, resolved_wallpaper_selections, source_identity
-from superpaper.studio_widgets import StudioActionButton, StudioNavigationButton, StudioSegmentButton
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
+from superpaper.studio_widgets import StudioActionButton, StudioNavigationButton, StudioSegmentButton
 from superpaper.wallpaper_processing import (
     change_wallpaper_job,
     resize_to_fill,
