@@ -32,8 +32,8 @@ from superpaper.data import (
     parse_profile_file,
     save_managed_profile,
 )
-from superpaper.local_shaders import ShaderImportError, available_shaders, import_shader_pack, normalize_shader
 from superpaper.image_adjustments import apply_local_adjustments, normalize_adjustment
+from superpaper.local_shaders import ShaderImportError, available_shaders, import_shader_pack, normalize_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import (
     crop_overflow,
