@@ -87,11 +87,35 @@ def test_processing_tabs_use_existing_cloud_shader_and_local_controls():
     assert "self.sizer_processing_cloud.Add(cloud_grid" in constructor
 
 
-def test_profile_gallery_supports_larger_cards_and_filtering():
+def test_profile_gallery_supports_clickable_cards_and_filtering():
     create = _method("WallpaperSettingsPanel", "create_studio_gallery")
     assert "wx.SearchCtrl" in create
-    assert "self._refresh_profile_gallery" in create
+    assert "self.studio_gallery_cards = wx.WrapSizer(wx.HORIZONTAL)" in create
+    assert "self.studio_quick_profile_row = wx.BoxSizer(wx.HORIZONTAL)" in create
     refresh = _method("WallpaperSettingsPanel", "_refresh_profile_gallery")
-    assert "width, height = (234, 134)" in refresh
+    assert "self._studio_make_profile_card(self.studio_gallery_scroller, profile, 234, 134)" in refresh
     assert "filter_text" in refresh
     assert "profile.name.lower()" in refresh
+    card = _method("WallpaperSettingsPanel", "_studio_make_profile_card")
+    assert "self._studio_profile_thumbnail(profile, width, height)" in card
+    assert "self._studio_select_profile(profile_name)" in card
+
+
+def test_sidebar_navigation_uses_custom_painted_controls_and_real_workspace_callbacks():
+    sidebar = _method("WallpaperSettingsPanel", "create_studio_navigation")
+    switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
+    assert "StudioNavigationButton(self.studio_sidebar, name, icon)" in sidebar
+    assert "self._set_studio_workspace(workspace)" in sidebar
+    assert "button.SetSelected(key == name)" in switching
+    painting = _method("StudioNavigationButton", "_paint")
+    assert "wx.AutoBufferedPaintDC(self)" in painting
+    assert "DrawRoundedRectangle" in painting
+
+
+def test_wallpaper_uses_preview_and_live_profile_strip_without_duplicate_form_row():
+    constructor = _method("WallpaperSettingsPanel", "__init__")
+    switching = _method("WallpaperSettingsPanel", "_set_studio_workspace")
+    assert "self.studio_canvas_column.Add(self.studio_quick_profiles" in constructor
+    assert "self.studio_canvas_column.Show(self.studio_quick_profiles" in switching
+    assert "self.sizer_bottom_half.Show(self.sizer_profiles" in switching
+    assert "name == 'Profiles'" in switching
