@@ -1209,7 +1209,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles", recursive=True)
-        self.studio_compare_row.Show(self.studio_compare_state, show=self.studio_compare.GetValue())
+        self._studio_sync_compare_workspace(name)
         self.studio_desktop_layout.Enable(name != "Displays")
         self.wpprev_pnl.set_desktop_layout(
             name not in ("Displays", "Profiles") and self.studio_desktop_layout.GetValue()
@@ -1324,6 +1324,21 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sld_zoom.SetValue(self.studio_quick_zoom.GetValue())
         self.onZoomOffsetChange(None)
 
+    def _studio_sync_compare_workspace(self, name):
+        """Hide local before/after tools during monitor calibration.
+
+        Keep the checkbox and split fraction intact for Wallpapers/Processing.
+        Repaint locally when the effective comparison mode changes, so the
+        Displays preview never retains an invisible split or caption overlay.
+        """
+        visible = name not in ("Displays", "Profiles")
+        self.studio_preview_tools.Show(self.studio_compare_row, show=visible, recursive=True)
+        self.studio_compare_row.Show(self.studio_compare_state, show=visible and self.studio_compare.GetValue())
+        effective_compare = visible and self.studio_compare.GetValue()
+        if self.wpprev_pnl.compare_original != effective_compare:
+            self.wpprev_pnl.compare_original = effective_compare
+            self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+
     def _studio_toggle_compare(self, event):
         self.wpprev_pnl.compare_original = self.studio_compare.GetValue()
         self.studio_split_slider.Enable(self.studio_compare.GetValue())
@@ -1333,7 +1348,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def _studio_update_compare_feedback(self):
         """Show a compact comparison status without expanding the view toolbar."""
-        enabled = self.studio_compare.GetValue()
+        enabled = self.studio_compare.GetValue() and self._workspace not in ("Displays", "Profiles")
         if enabled:
             has_edits = bool(self.wpprev_pnl.sharpen or any(self.wpprev_pnl.tone))
             self.studio_compare_state.SetLabel("Local edits active" if has_edits else "No local edits")
