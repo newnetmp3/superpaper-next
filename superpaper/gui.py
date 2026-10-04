@@ -1044,9 +1044,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_image_card = wx.BoxSizer(wx.VERTICAL)
         self.studio_image_card.Add(wx.StaticText(self, label="IMAGE & PLACEMENT"), 0, wx.EXPAND | wx.BOTTOM, 8)
         empty_image = Image.new("RGB", (266, 94), (25, 33, 44))
-        self.studio_image_thumbnail = wx.StaticBitmap(
-            self, bitmap=wx.Bitmap.FromBuffer(266, 94, empty_image.tobytes())
-        )
+        self.studio_image_thumbnail = wx.StaticBitmap(self, bitmap=wx.Bitmap.FromBuffer(266, 94, empty_image.tobytes()))
         self.studio_image_card.Add(self.studio_image_thumbnail, 0, wx.EXPAND | wx.BOTTOM, 6)
         self.studio_image_name = wx.StaticText(self, label="No image selected")
         self.studio_image_card.Add(self.studio_image_name, 0, wx.EXPAND | wx.BOTTOM, 7)
