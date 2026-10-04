@@ -52,6 +52,22 @@ machine. A public community Space is not a service with guaranteed uptime,
 confidentiality, or long-term API compatibility. Avoid enabling it for private
 or sensitive pictures. Already-cached outputs may be used while offline.
 
+### Matching the preview to an AI-upscaled wallpaper
+
+**The wallpaper preview always uses the original image.** The applied wallpaper
+uses the enhanced image when cloud AI upscaling is enabled and succeeds.
+Both paths use the same source-relative zoom and horizontal/vertical placement;
+the upscaled image does not create a new position coordinate system. EXIF
+orientation is respected in the preview and in the final render, and cloud
+outputs with an incompatible aspect ratio are rejected.
+
+Click **Save & Apply** to persist the source image choice, zoom, placement,
+span settings and AI upscaling preference to the profile before applying the
+wallpaper. The existing **Apply** button is a temporary test; the ordinary
+**Save** control also persists these settings without applying. Saved framing
+continues to work when the cloud service is unavailable, and the original
+wallpaper file is not modified.
+
 ### Native Wayland System Tray
 - **Interactive tray on Wayland**: a native `StatusNotifierItem` tray icon replaces the legacy X11 tray, which appeared but was completely unclickable on modern Wayland desktops (notably KDE Plasma 6).
 - **Full tray controls**: left-click opens the wallpaper settings, middle-click advances the wallpaper, and right-click shows the full menu with your profiles grouped under a **Profiles** submenu.

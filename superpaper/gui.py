@@ -10,7 +10,7 @@ import time
 from operator import itemgetter
 from typing import Literal, overload
 
-from PIL import Image, ImageEnhance, UnidentifiedImageError
+from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 
 import superpaper.sp_logging as sp_logging
 import superpaper.wallpaper_processing as wpproc
@@ -631,9 +631,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.button_align_test = wx.Button(self, label="Align Test")
         self.button_perspectives = wx.Button(self, label="Perspectives")
         self.button_apply = wx.Button(self, label="Apply")
+        self.button_save_apply = wx.Button(self, label="Save && Apply")
+        self.button_apply.SetToolTip("Apply temporarily. Save the profile to retain its framing settings.")
+        self.button_save_apply.SetToolTip("Save zoom, position, upscaling and image choice, then apply them.")
         self.button_close = wx.Button(self, label="Close")
 
         self.button_apply.Bind(wx.EVT_BUTTON, self.onApply)
+        self.button_save_apply.Bind(wx.EVT_BUTTON, self.onSaveAndApply)
         self.button_align_test.Bind(wx.EVT_BUTTON, self.onAlignTest)
         self.button_perspectives.Bind(wx.EVT_BUTTON, self.onPerspectives)
         self.button_help.Bind(wx.EVT_BUTTON, self.onHelp)
@@ -647,6 +651,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_bottom_buttonrow.Layout()
         self.sizer_bottom_buttonrow.AddStretchSpacer()
         self.sizer_bottom_buttonrow.Add(self.button_apply, 0, wx.ALL, 5)
+        self.sizer_bottom_buttonrow.Add(self.button_save_apply, 0, wx.ALL, 5)
         self.sizer_bottom_buttonrow.Add(self.button_close, 0, wx.ALL, 5)
 
     #
@@ -1482,6 +1487,11 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         # No saved profile to revert to: reset to an empty new profile.
         self.onCreateNewProfile(None)
 
+    def onSaveAndApply(self, event):
+        """Persist the source-referenced framing before applying the wallpaper."""
+        if self.onSave(None) is not None:
+            self.onApply(event)
+
     def onApply(self, event):
         """Render the current edits as a one-off preview without saving.
 
@@ -2295,8 +2305,10 @@ class WallpaperPreviewPanel(wx.Panel):
     def resize_and_bitmap(self, fname, size, enhance_color=False):
         """Take filename of an image and resize and crop it to size."""
         try:
-            pil = resize_to_fill(Image.open(fname), size, quality="fast", zoom=self.zoom, offset=self.offset)
-        except UnidentifiedImageError:
+            with Image.open(fname) as source:
+                oriented = ImageOps.exif_transpose(source)
+                pil = resize_to_fill(oriented, size, quality="fast", zoom=self.zoom, offset=self.offset)
+        except OSError, UnidentifiedImageError:
             msg = (
                 f"Opening image '{fname}' failed with PIL.UnidentifiedImageError."
                 "It could be corrupted or is of foreign type."
@@ -2835,7 +2847,7 @@ class WallpaperPreviewPanel(wx.Panel):
         path, size = target
         try:
             with Image.open(path) as image:
-                overflow = crop_overflow(image.size, size, self.zoom)
+                overflow = crop_overflow(ImageOps.exif_transpose(image).size, size, self.zoom)
         except OSError, ValueError:
             event.Skip()
             return

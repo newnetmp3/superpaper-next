@@ -64,3 +64,24 @@ def wheel_scroll_units(rotation, delta, lines, remainder=0.0):
     total = remainder - rotation / delta * max(lines, 1)
     units = int(total)
     return units, total - units
+
+
+def original_frame_box(source_size, target_size, zoom, offset):
+    """Crop coordinates in the ORIGINAL image's pixel space.
+
+    The zoom and normalized pan settings remain attached to the source image,
+    independent of any later enhancement or output resolution. The result can
+    be mapped into a uniformly enhanced image using its size ratios.
+    """
+    if not has_positive_area(source_size) or not has_positive_area(target_size):
+        raise PreviewGeometryError
+    source_w, source_h = source_size
+    target_w, target_h = target_size
+    zoom = max(1.0, float(zoom))
+    offset_x = max(-1.0, min(1.0, float(offset[0])))
+    offset_y = max(-1.0, min(1.0, float(offset[1])))
+    crop_width = min(source_w, source_h * target_w / target_h) / zoom
+    crop_height = min(source_h, source_w * target_h / target_w) / zoom
+    left = (source_w - crop_width) * (1 + offset_x) / 2
+    top = (source_h - crop_height) * (1 + offset_y) / 2
+    return left, top, left + crop_width, top + crop_height
