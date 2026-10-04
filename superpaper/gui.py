@@ -387,7 +387,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
     #
     def create_sizer_profiles(self):
         # choice menu
-        # self.list_of_profiles = list_profiles()
         self.list_of_profiles = self.parent_tray_obj.list_of_profiles
         self.profnames = []
         for prof in self.list_of_profiles:
@@ -1653,7 +1652,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         else:
             display_data = self.display_sys.get_disp_list(False)
         self.wpprev_pnl.preview_wallpaper(
-            # profile.next_wallpaper_files(peek=True),
             self.parent_tray_obj.get_profile_by_name(profile.name).next_wallpaper_files(peek=True),
             self.show_advanced_settings,
             self.use_multi_image,
@@ -1833,7 +1831,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def update_choiceprofile(self):
         """Reload profile list into the choice box."""
-        # self.list_of_profiles = list_profiles()
         self.list_of_profiles = self.parent_tray_obj.list_of_profiles
         self.profnames = []
         for prof in self.list_of_profiles:
@@ -2653,8 +2650,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 self.onCreateNewProfile(event)
             else:
                 self.populate_fields(self.list_of_profiles[item])
-        else:
-            pass
 
     def onRevert(self, event):
         """Discards unsaved changes and reloads the saved profile from disk."""
@@ -2827,8 +2822,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             groups = self.read_spangroups()
             flat_groups = []
             if groups is not None:
-                for grp in groups:
-                    ids = "".join([str(i) for i in groups[grp]])
+                for grp in sorted(groups):
+                    ids = "".join(str(i) for i in groups[grp])
                     flat_groups.append(ids)
             tmp_profile.spangroups = ",".join(flat_groups)
 
@@ -3070,8 +3065,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.parent_tray_obj.reload_profiles(event)
             self.update_choiceprofile()
             self.onCreateNewProfile(None)
-        else:
-            pass
 
     def onAlignTest(self, event):
         """Align test, takes alignment settings from open profile and sets a test image wp."""
