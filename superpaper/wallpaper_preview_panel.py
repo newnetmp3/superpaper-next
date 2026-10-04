@@ -28,7 +28,6 @@ from superpaper.sp_paths import RESOURCES_PATH
 from superpaper.wallpaper_processing import resize_to_fill
 
 
-
 class WallpaperPreviewPanel(wx.Panel):
     """
     Wallpaper & monitor preview panel.
