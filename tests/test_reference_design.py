@@ -120,6 +120,7 @@ def test_wallpaper_uses_preview_and_live_profile_strip_without_duplicate_form_ro
     assert "self.sizer_bottom_half.Show(self.sizer_profiles" in switching
     assert "name == 'Profiles'" in switching
 
+
 def test_profile_tiles_keep_text_visible_and_do_not_stretch_to_row_width():
     create = _method("WallpaperSettingsPanel", "create_studio_gallery")
     assert "wx.WrapSizer(wx.HORIZONTAL, flags=0)" in create
