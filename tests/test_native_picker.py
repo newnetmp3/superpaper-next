@@ -49,22 +49,24 @@ def test_kdialog_supports_multiple_images_and_folder_choice(tmp_path):
         calls.append(argv)
         return completed(0, "/tmp/one.png\n/tmp/two.webp\n")
 
-    options = dict(environment={"XDG_CURRENT_DESKTOP": "KDE"}, which=lambda _: "kdialog", runner=runner)
+    options = {"environment": {"XDG_CURRENT_DESKTOP": "KDE"}, "which": lambda _: "kdialog", "runner": runner}
     assert pick_kde_paths(str(tmp_path), multiple=True, **options) == ["/tmp/one.png", "/tmp/two.webp"]
     assert calls[-1][-2:] == ["--multiple", "--separate-output"]
-    runner_folder = lambda *_args, **_kwargs: completed(0, "/tmp/wallpaper folder\n")
+    def runner_folder(*_args, **_kwargs):
+        return completed(0, "/tmp/wallpaper folder\n")
     assert pick_kde_paths(str(tmp_path), folders=True, **(options | {"runner": runner_folder})) == [
         "/tmp/wallpaper folder"
     ]
 
 
 def test_cancel_does_not_reopen_gtk_fallback(tmp_path):
-    options = dict(environment={"XDG_CURRENT_DESKTOP": "KDE"}, which=lambda _: "kdialog")
+    options = {"environment": {"XDG_CURRENT_DESKTOP": "KDE"}, "which": lambda _: "kdialog"}
     assert pick_kde_paths(str(tmp_path), runner=lambda *_a, **_kw: completed(1), **options) == []
 
 
 def test_unavailable_kde_picker_explicitly_requests_toolkit_fallback(tmp_path):
-    runner = lambda *_a, **_kw: pytest.fail("Should not start process without kdialog")
+    def runner(*_a, **_kw):
+        pytest.fail("Should not start process without kdialog")
     assert (
         pick_kde_paths(
             str(tmp_path),
@@ -86,7 +88,7 @@ def test_unavailable_kde_picker_explicitly_requests_toolkit_fallback(tmp_path):
 
 
 def test_picker_errors_do_not_masquerade_as_cancellations(tmp_path):
-    options = dict(environment={"XDG_CURRENT_DESKTOP": "KDE"}, which=lambda _: "kdialog")
+    options = {"environment": {"XDG_CURRENT_DESKTOP": "KDE"}, "which": lambda _: "kdialog"}
     with pytest.raises(NativePickerError, match="exit code 2"):
         pick_kde_paths(str(tmp_path), runner=lambda *_a, **_kw: completed(2, stderr="display error"), **options)
     with pytest.raises(NativePickerError, match="could not be started"):
