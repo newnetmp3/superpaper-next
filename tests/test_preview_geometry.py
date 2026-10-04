@@ -130,7 +130,9 @@ def test_bitmap_children_receive_wallpaper_drag_events():
     """Displayed wx.StaticBitmaps eat mouse events unless bound directly."""
     source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
-    preview = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
+    preview = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel"
+    )
 
     def method(name):
         function = next(node for node in preview.body if isinstance(node, ast.FunctionDef) and node.name == name)
@@ -158,7 +160,9 @@ def test_wallpaper_bitmap_drag_coordinates_are_relative_to_parent():
     """Simulate child-local and parent mouse events without wxPython."""
     source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
-    preview = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
+    preview = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel"
+    )
     method = next(
         node for node in preview.body if isinstance(node, ast.FunctionDef) and node.name == "_preview_mouse_position"
     )
