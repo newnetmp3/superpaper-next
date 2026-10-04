@@ -114,3 +114,29 @@ def desktop_preview_layout(displays, work_size):
         for res, offset in displays
     ]
     return canvas_size, canvas_pos, rectangles
+
+
+def comparison_hit_region(regions, point, fraction, *, tolerance=18):
+    """Return pixels per complete split fraction if pointer touches the divider.
+
+    A region is (screen_x, screen_y, screen_w, screen_h, crop_x,
+    crop_w, source_canvas_w). Its crop may be scaled or repositioned
+    independently from the source canvas in the desktop layout.
+    """
+    px, py = point
+    for left, top, width, height, crop_left, crop_width, canvas_width in regions:
+        if min(width, height, crop_width, canvas_width) <= 0:
+            continue
+        divider = left + (fraction * canvas_width - crop_left) * width / crop_width
+        if not left <= divider <= left + width:
+            continue
+        if left <= px <= left + width and top <= py <= top + height and abs(px - divider) <= tolerance:
+            return canvas_width * width / crop_width
+    return None
+
+
+def comparison_drag_fraction(original_fraction, delta_x, pixels_per_fraction):
+    """Move a split handle without changing wallpaper pan or saved settings."""
+    if pixels_per_fraction <= 0:
+        return max(0.0, min(1.0, float(original_fraction)))
+    return max(0.0, min(1.0, float(original_fraction) + delta_x / pixels_per_fraction))

@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from superpaper.preview_geometry import (
+    comparison_drag_fraction,
+    comparison_hit_region,
     crop_overflow,
     desktop_preview_layout,
     fit_preview_canvas,
@@ -248,3 +250,34 @@ def test_desktop_preview_preserves_mouse_drags_and_calibration_mode():
     assert "self.set_desktop_layout(False)" in methods["onConfigure"]
     assert "desktop_preview_layout(displays, self.GetClientSize())" in methods["_desktop_preview_rectangles"]
     assert "prepare_cloud_upscaled_image(" not in methods["_update_desktop_preview"]
+
+
+def test_handle_hit_detection_tracks_staggered_desktop_crop_mapping():
+    # Physical compositor cropped this monitor out of a wider source canvas,
+    # then desktop preview scaled it down for the actual digital arrangement.
+    region = (400, 75, 240, 160, 300, 600, 1200)
+    # 50% across the full canvas is x=600; inside this crop = x=520.
+    assert comparison_hit_region([region], (520, 130), 0.5) == pytest.approx(480)
+    assert comparison_hit_region([region], (490, 130), 0.5) is None
+    assert comparison_hit_region([region], (520, 60), 0.5) is None
+    # At 90% the divider is outside the selected monitor, so no handle exists.
+    assert comparison_hit_region([region], (620, 130), 0.9) is None
+
+
+def test_dragging_handle_maps_screen_distance_to_fraction_and_clamps():
+    assert comparison_drag_fraction(0.5, 120, 480) == pytest.approx(0.75)
+    assert comparison_drag_fraction(0.5, -120, 480) == pytest.approx(0.25)
+    assert comparison_drag_fraction(0.5, 2000, 480) == 1.0
+    assert comparison_drag_fraction(0.5, -2000, 480) == 0.0
+    assert comparison_drag_fraction(0.5, 200, 0) == 0.5
+
+
+def test_handle_hit_skips_gaps_and_invalid_screen_regions():
+    regions = [
+        (10, 10, 200, 110, 0, 200, 400),
+        (340, 40, 200, 120, 200, 200, 400),
+        (0, 0, 0, 200, 0, 200, 400),
+    ]
+    # 50% boundary is at the left edge of second monitor.
+    assert comparison_hit_region(regions, (340, 70), 0.5) == 400
+    assert comparison_hit_region(regions, (275, 70), 0.5) is None
