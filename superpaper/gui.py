@@ -1165,7 +1165,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
         self.studio_desktop_layout.Enable(name != "Displays")
-        self.wpprev_pnl.set_desktop_layout(name not in ("Displays", "Profiles") and self.studio_desktop_layout.GetValue())
+        self.wpprev_pnl.set_desktop_layout(
+            name not in ("Displays", "Profiles") and self.studio_desktop_layout.GetValue()
+        )
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
         self.studio_canvas_column.Show(self.studio_quick_profiles, show=name == "Wallpapers", recursive=True)
         self.studio_canvas_column.Show(self.studio_processing_preview, show=name == "Processing", recursive=True)
