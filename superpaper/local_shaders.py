@@ -33,6 +33,15 @@ MAX_INPUT_PIXELS = 16_000_000
 RENDER_TIMEOUT = 120
 _SHADER_RENDER_VARIANTS = ("direct", "hardware-upload")
 _SHADER_RE = re.compile(r"^Anime4K_[A-Za-z0-9_-]+[.]glsl$")
+_PRESET_RE = re.compile(r"^Anime4K_Mode_[ABC]$")
+# The MPV pack contains individual hooks. AutoDownscalePre is not an effect:
+# it must run after an Upscale pass, and must not appear in the effect picker.
+_PRESET_STAGES = {
+    "Anime4K_Mode_A": ("Restore_CNN", "Upscale_CNN_x2"),
+    "Anime4K_Mode_B": ("Restore_CNN_Soft", "Upscale_CNN_x2"),
+    "Anime4K_Mode_C": ("Upscale_Denoise_CNN_x2",),
+}
+_VARIANT_ORDER = ("M", "S", "L", "VL", "UL")
 
 
 class ShaderImportError(ValueError):
@@ -44,7 +53,7 @@ def normalize_shader(name):
     if name is None:
         return ""
     value = str(name).strip()
-    return value if _SHADER_RE.fullmatch(value) else ""
+    return value if _SHADER_RE.fullmatch(value) or _PRESET_RE.fullmatch(value) else ""
 
 
 def shader_directory():
@@ -70,16 +79,51 @@ def locate_shader(name, *, shader_root=None):
     return None
 
 
-def available_shaders(*, shader_root=None):
-    """List installed supported hooks; system mpv shader files are read-only."""
+def _installed_hooks(*, shader_root=None):
+    """List genuine imported hook files; no profile/preset identifiers."""
     choices = set()
     for folder in _candidate_dirs(shader_root):
         if folder.is_dir():
             choices.update(
                 item.name
                 for item in folder.iterdir()
-                if normalize_shader(item.name) and item.is_file() and item.stat().st_size <= MAX_SHADER_BYTES
+                if _SHADER_RE.fullmatch(item.name) and item.is_file() and item.stat().st_size <= MAX_SHADER_BYTES
             )
+    return sorted(choices)
+
+
+def resolve_shader_chain(name, *, shader_root=None):
+    """Resolve an MPV-style ordered chain, or a single independent effect.
+
+    The AutoDownscalePre hooks only control resolution between two other
+    Anime4K stages. They have no standalone effect and are not valid presets.
+    """
+    name = normalize_shader(name)
+    if not name or "AutoDownscalePre" in name:
+        return ()
+    if name not in _PRESET_STAGES:
+        shader = locate_shader(name, shader_root=shader_root)
+        return (shader,) if shader is not None else ()
+    hooks = set(_installed_hooks(shader_root=shader_root))
+    chosen = []
+    for stage in _PRESET_STAGES[name]:
+        source = None
+        for variant in _VARIANT_ORDER:
+            filename = f"Anime4K_{stage}_{variant}.glsl"
+            if filename in hooks:
+                source = locate_shader(filename, shader_root=shader_root)
+                break
+        if source is None:
+            return ()
+        chosen.append(source)
+    return tuple(chosen)
+
+
+def available_shaders(*, shader_root=None):
+    """Selectable MPV-style ordered modes and usable individual effects."""
+    hooks = _installed_hooks(shader_root=shader_root)
+    choices = [name for name in hooks if "AutoDownscalePre" not in name]
+    choices.extend(name for name in _PRESET_STAGES if resolve_shader_chain(name, shader_root=shader_root))
     return sorted(choices)
 
 
@@ -89,7 +133,7 @@ def _validate_entry(name, data):
     if ".." in parts or Path(name).is_absolute():
         raise ShaderImportError("Shader archive contains an unsafe path.")
     basename = Path(name).name
-    if not normalize_shader(basename):
+    if not _SHADER_RE.fullmatch(basename):
         return None
     if len(data) > MAX_SHADER_BYTES or b"//!HOOK " not in data:
         raise ShaderImportError("Invalid or excessively large Anime4K shader: " + basename)
@@ -161,7 +205,7 @@ def shader_output_size(image_size, target_size, zoom, shader_name):
     if not shader_name or not all(v > 0 for v in (*image_size, *target_size)):
         return image_size
     # Anime4K Upscale hooks are conditioned on OUTPUT being larger than MAIN.
-    scale = 2 if "_Upscale_" in shader_name else 1
+    scale = 2 if "_Upscale_" in shader_name or shader_name in _PRESET_STAGES else 1
     return image_size[0] * scale, image_size[1] * scale
 
 
@@ -189,6 +233,39 @@ def shader_error_detail(stderr):
     return "\n".join((lines[:12] + lines[-4:]) if len(lines) > 16 else lines)[:4000]
 
 
+def diagnose_ffmpeg_backend(ffmpeg):
+    """Test bare Vulkan/libplacebo without shaders to separate GPU from GLSL faults."""
+    command = [
+        ffmpeg,
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "verbose",
+        "-init_hw_device",
+        "vulkan=vk",
+        "-filter_hw_device",
+        "vk",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=gray:s=64x64:d=0.1",
+        "-vf",
+        "libplacebo=w=64:h=64",
+        "-frames:v",
+        "1",
+        "-f",
+        "null",
+        "-",
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=20)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "Baseline FFmpeg Vulkan test could not run: " + str(exc)
+    if result.returncode:
+        return "Baseline libplacebo/Vulkan failed without Anime4K: " + shader_error_detail(result.stderr)
+    return "Baseline libplacebo/Vulkan succeeded: check selected GLSL hook compatibility and pixel format."
+
+
 def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, shader_root=None):
     """Apply the chosen shader on the local Vulkan GPU; fail open to image.
 
@@ -198,9 +275,13 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
     name = normalize_shader(name)
     if not name:
         return image
-    shader = locate_shader(name, shader_root=shader_root)
-    if shader is None:
-        LOGGER.warning("Local shader %s not installed; import a shader pack first.", name)
+    shaders = resolve_shader_chain(name, shader_root=shader_root)
+    if not shaders:
+        LOGGER.warning(
+            "Anime4K effect %s is unavailable or a pipeline-only helper. "
+            "Select a complete Mode A/B/C preset, or another standalone effect.",
+            name,
+        )
         return image
     dimensions = shader_output_size(image.size, target_size, zoom, name)
     if image.width * image.height > MAX_INPUT_PIXELS or dimensions[0] * dimensions[1] > MAX_OUTPUT_PIXELS:
@@ -213,8 +294,10 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
     try:
         digest = hashlib.sha256()
         digest.update(image.convert("RGB").tobytes())
-        digest.update(shader.read_bytes())
-        digest.update(f"{name}:{dimensions}:libplacebo-v2".encode())
+        for shader in shaders:
+            digest.update(shader.name.encode())
+            digest.update(shader.read_bytes())
+        digest.update(f"{name}:{dimensions}:libplacebo-mpv-chain-v1".encode())
         cache = Path(cache_root) if cache_root is not None else Path(tempfile.gettempdir())
         cache = cache / "local-shader-output" / (digest.hexdigest() + ".png")
         if cache.is_file():
@@ -231,7 +314,9 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
             # A short, controlled path prevents FFmpeg filtergraph injections
             # from special characters in profile or user directory names.
             hook = work / "shader.glsl"
-            shutil.copyfile(shader, hook)
+            # libplacebo parses MPV's //!HOOK blocks. Concatenating their
+            # complete text retains each pass and its defined execution order.
+            hook.write_bytes(b"\n\n".join(shader.read_bytes() for shader in shaders) + b"\n")
             image.convert("RGB").save(src)
             # Attempt the modern direct libplacebo software-frame input
             # first. Not all FFmpeg builds support the explicit hwupload path
@@ -244,7 +329,7 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
                     "-nostdin",
                     "-hide_banner",
                     "-loglevel",
-                    "warning",
+                    "verbose",
                     "-y",
                     "-init_hw_device",
                     "vulkan=vk",
@@ -273,9 +358,9 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
                 )
             if not rendered:
                 LOGGER.warning(
-                    "Anime4K shader %s could not render using either FFmpeg path. "
-                    "Check ffmpeg -h filter=libplacebo for custom_shader_path and verify Vulkan via vulkaninfo.",
+                    "Anime4K shader %s could not render using either FFmpeg path. %s",
                     name,
+                    diagnose_ffmpeg_backend(ffmpeg),
                 )
                 return image
             with Image.open(output) as rendered:
