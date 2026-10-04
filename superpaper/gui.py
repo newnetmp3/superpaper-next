@@ -8,15 +8,13 @@ import sys
 import tempfile
 import time
 from operator import itemgetter
-from typing import Literal, overload
 
-from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageOps
 
 import superpaper.sp_logging as sp_logging
 import superpaper.wallpaper_processing as wpproc
-from superpaper.cloud_upscale import UPSCALE_MODES, locally_sharpen, normalize_scale_mode, normalize_sharpen
+from superpaper.cloud_upscale import UPSCALE_MODES, normalize_scale_mode, normalize_sharpen
 from superpaper.configuration_dialogs import (
-    DisplayPositionEntry,
     HelpFrame,
     HelpPopup,
     PerspectiveConfig,
@@ -31,38 +29,23 @@ from superpaper.data import (
     parse_profile_file,
     save_managed_profile,
 )
-from superpaper.image_adjustments import apply_local_adjustments, normalize_adjustment, split_local_preview
+from superpaper.image_adjustments import normalize_adjustment
 from superpaper.local_shaders import ShaderImportError, available_shaders, import_shader_pack, normalize_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.native_picker import NativePickerError, pick_kde_paths
-from superpaper.preview_geometry import (
-    comparison_drag_fraction,
-    comparison_hit_region,
-    crop_overflow,
-    desktop_preview_layout,
-    fit_preview_canvas,
-    has_positive_area,
-    pan_offset_for_drag,
-    usable_preview_area,
-    wheel_scroll_units,
-)
+from superpaper.preview_geometry import wheel_scroll_units
 from superpaper.profile_id import ProfileId, ProfileIdError
 from superpaper.source_paths import IMAGE_EXTENSIONS, resolved_wallpaper_selections, source_identity
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
 from superpaper.studio_widgets import StudioActionButton, StudioNavigationButton, StudioSegmentButton
 from superpaper.wallpaper_preview_panel import WallpaperPreviewPanel
-from superpaper.wallpaper_processing import (
-    change_wallpaper_job,
-    resize_to_fill,
-)
+from superpaper.wallpaper_processing import change_wallpaper_job
 
 try:
     import wx  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
     import wx.adv  # pyright: ignore[reportMissingImports]  # ty:ignore[unresolved-import]
 except ImportError:
     sys.exit()
-
-
 
 
 class ConfigFrame(wx.Frame):
