@@ -81,9 +81,8 @@ def test_shader_command_uses_ffmpeg_libplacebo_and_reuses_cache(tmp_path, monkey
         commands.append(command)
         assert kwargs["timeout"] == local_shaders.RENDER_TIMEOUT
         assert kwargs["check"] is False
-        assert "-init_hw_device" in command
-        assert "vulkan=vk" in command
-        assert "-filter_hw_device" in command
+        assert "-init_hw_device" not in command
+        assert "-filter_hw_device" not in command
         assert "custom_shader_path=" in " ".join(command)
         assert "libplacebo=w=40:h=20:" in command[command.index("-vf") + 1]
         output = Path(command[-1])
@@ -193,8 +192,11 @@ def test_shader_tries_compatibility_graph_after_filter_failure(tmp_path, monkeyp
         graph = command[command.index("-vf") + 1]
         if len(commands) == 1:
             assert "hwupload" not in graph
+            assert "-init_hw_device" not in command
             return SimpleNamespace(returncode=1, stderr="[AVFilterGraph] Error initializing filters")
         assert "hwupload" in graph
+        assert "-init_hw_device" in command
+        assert "-filter_hw_device" in command
         Image.new("RGB", (32, 24), "green").save(command[-1])
         return SimpleNamespace(returncode=0, stderr="")
 
@@ -316,9 +318,12 @@ def test_ffmpeg_failure_diagnoses_vulkan_without_anime4k(tmp_path, monkeypatch):
     assert (
         local_shaders.apply_image_shader(source, NAME, (60, 40), shader_root=installed, cache_root=tmp_path) is source
     )
-    assert len(commands) == 3
-    assert "color=c=gray:s=64x64:d=0.1" in commands[-1]
-    assert "libplacebo=w=64:h=64" in commands[-1]
+    assert len(commands) == 4
+    for command in commands[-2:]:
+        assert "color=c=gray:s=64x64:d=0.1" in command
+        assert "libplacebo=w=64:h=64" in command
+    assert "-init_hw_device" not in commands[-2]
+    assert "-init_hw_device" in commands[-1]
 
 
 def test_shader_diagnostics_skip_verbose_vulkan_overlay_layer_listing():
@@ -339,3 +344,59 @@ def test_shader_diagnostics_skip_verbose_vulkan_overlay_layer_listing():
     assert "Invalid argument" in detail
     assert "VK_LAYER_VALVE" not in detail
     assert "VK_LAYER_MESA" not in detail
+
+
+def test_libplacebo_owned_device_is_used_first_and_shader_is_cached(tmp_path, monkeypatch):
+    shaders = tmp_path / "shaders"
+    shaders.mkdir()
+    (shaders / NAME).write_bytes(HOOK)
+    monkeypatch.setattr(local_shaders.shutil, "which", lambda _executable: "/usr/bin/ffmpeg")
+    commands = []
+
+    def render(command, **_kwargs):
+        commands.append(command)
+        assert "-init_hw_device" not in command
+        assert "-filter_hw_device" not in command
+        assert "libplacebo=w=44:h=30" in command[command.index("-vf") + 1]
+        Image.new("RGB", (44, 30), "blue").save(command[-1])
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(local_shaders.subprocess, "run", render)
+    source = Image.new("RGB", (44, 30), "yellow")
+    kwargs = {"shader_root": shaders, "cache_root": tmp_path / "output"}
+    one = local_shaders.apply_image_shader(source, NAME, (44, 30), **kwargs)
+    two = local_shaders.apply_image_shader(source, NAME, (44, 30), **kwargs)
+    assert one.tobytes() == two.tobytes()
+    assert one.getpixel((0, 0)) == (0, 0, 255)
+    assert len(commands) == 1
+
+
+def test_baseline_diagnostic_reports_libplacebo_owned_success(monkeypatch):
+    calls = []
+
+    def render(command, **_kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(local_shaders.subprocess, "run", render)
+    detail = local_shaders.diagnose_ffmpeg_backend("/usr/bin/ffmpeg")
+    assert "libplacebo-managed Vulkan succeeded" in detail
+    assert len(calls) == 1
+    assert "-init_hw_device" not in calls[0]
+
+
+def test_baseline_diagnostic_distinguishes_external_device_success(monkeypatch):
+    calls = []
+
+    def render(command, **_kwargs):
+        calls.append(command)
+        return SimpleNamespace(
+            returncode=0 if "-init_hw_device" in command else 234, stderr="Error initializing filters"
+        )
+
+    monkeypatch.setattr(local_shaders.subprocess, "run", render)
+    detail = local_shaders.diagnose_ffmpeg_backend("/usr/bin/ffmpeg")
+    assert "external FFmpeg Vulkan device succeeded" in detail
+    assert len(calls) == 2
+    assert "-init_hw_device" not in calls[0]
+    assert "-init_hw_device" in calls[1]
