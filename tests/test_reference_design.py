@@ -14,9 +14,8 @@ GUI = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
 def _method(class_name, method):
     tree = ast.parse(GUI.read_text(encoding="utf-8"))
     owner = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name)
-    return ast.unparse(
-        next(node for node in owner.body if isinstance(node, ast.FunctionDef) and node.name == method)
-    )
+    matches = [node for node in owner.body if isinstance(node, ast.FunctionDef) and node.name == method]
+    return ast.unparse(matches[-1])
 
 
 def test_preview_stage_is_compact_and_not_stretched_to_window_height():
@@ -38,7 +37,7 @@ def test_inactive_advanced_controls_are_hidden_recursively():
 
 
 def test_only_one_apply_button_in_persistent_footer():
-    footer = _method("WallpaperSettingsPanel", "create_sizer_bottom_buttons")
+    footer = _method("WallpaperSettingsPanel", "create_sizer_bottom_buttonrow")
     assert "self.sizer_bottom_buttonrow.Add(self.button_save_apply" in footer
     assert "self.sizer_bottom_buttonrow.Add(self.button_apply" not in footer
     header = _method("WallpaperSettingsPanel", "create_studio_navigation")
@@ -58,7 +57,7 @@ def test_navigation_and_real_monitor_layout_editor():
 def test_preview_toolbar_zoom_and_alignment_are_real():
     init = _method("WallpaperSettingsPanel", "create_studio_navigation")
     for label in ("Left", "Center", "Right"):
-        assert f'("{label}",' in init
+        assert f"'{label}'" in init
     align = _method("WallpaperSettingsPanel", "_studio_align_image")
     assert "self.sld_offx.SetValue(value)" in align
     assert "self.onZoomOffsetChange(None)" in align
