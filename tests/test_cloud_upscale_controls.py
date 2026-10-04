@@ -43,6 +43,7 @@ def test_cache_survives_disable_reenable_and_model_switches(tmp_path, monkeypatc
 
     monkeypatch.setattr(cloud_upscale, "_request_remote_upscale", server)
     opts = {"zoom": 1, "cache_root": tmp_path}
+
     def apply(mode, enabled=True):
         return cloud_upscale.prepare_cloud_upscaled_image(
             image, source, (70, 42), enabled=enabled, scale_mode=mode, **opts
@@ -141,9 +142,13 @@ def test_render_passes_cloud_quality_controls(profile_modules, monkeypatch, tmp_
 
     monkeypatch.setattr(wpproc, "prepare_cloud_upscaled_image", capture)
     profile = SimpleNamespace(
-        name="options", zoom=1.25, offsets=(0.0, 0.0),
-        cloud_upscale=True, cloud_upscale_scale="8", cloud_upscale_sharpen=60,
-        next_wallpaper_files=lambda: [str(source)]
+        name="options",
+        zoom=1.25,
+        offsets=(0.0, 0.0),
+        cloud_upscale=True,
+        cloud_upscale_scale="8",
+        cloud_upscale_sharpen=60,
+        next_wallpaper_files=lambda: [str(source)],
     )
     assert wpproc.span_single_image_simple(profile, force=True) == 0
     assert kwargs_seen[0]["scale_mode"] == "8"

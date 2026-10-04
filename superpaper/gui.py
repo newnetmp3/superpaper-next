@@ -373,9 +373,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         cloud_grid = wx.FlexGridSizer(2, 3, 5, 5)
         cloud_grid.AddGrowableCol(1, 1)
         cloud_scale_label = wx.StaticText(statbox_parent_zoom, -1, "AI model:")
-        self.ch_cloud_scale = wx.Choice(
-            statbox_parent_zoom, choices=["Auto (when needed)", "2x", "4x", "8x"]
-        )
+        self.ch_cloud_scale = wx.Choice(statbox_parent_zoom, choices=["Auto (when needed)", "2x", "4x", "8x"])
         self.ch_cloud_scale.SetSelection(0)
         self.ch_cloud_scale.SetToolTip(
             "Real-ESRGAN supports 2x, 4x and 8x models. Auto upscales only "
@@ -389,12 +387,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         cloud_grid.AddSpacer(1)
 
         cloud_sharpen_label = wx.StaticText(statbox_parent_zoom, -1, "Sharpen (local):")
-        self.sld_cloud_sharpen = wx.Slider(
-            statbox_parent_zoom, -1, 0, 0, 100, style=wx.SL_HORIZONTAL
-        )
-        self.st_cloud_sharpen = wx.StaticText(
-            statbox_parent_zoom, -1, "0", size=wx.Size(40, -1), style=wx.ALIGN_RIGHT
-        )
+        self.sld_cloud_sharpen = wx.Slider(statbox_parent_zoom, -1, 0, 0, 100, style=wx.SL_HORIZONTAL)
+        self.st_cloud_sharpen = wx.StaticText(statbox_parent_zoom, -1, "0", size=wx.Size(40, -1), style=wx.ALIGN_RIGHT)
         self.sld_cloud_sharpen.SetToolTip(
             "Optional sharpness after AI upscaling (0 = original enhancement). "
             "Computed locally from the cached AI image: adjusting this never uses cloud credits."
