@@ -2446,22 +2446,175 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.button_bezels_canc.Disable()
         self.button_bezels.Enable()
 
-    def onBrowsePaths(self, event):
-        """Opens the pick paths dialog."""
-        multiple_image_area = self.use_multi_image or self.use_spangroups()
-        num_groups = None
-        if self.use_spangroups():
-            groups = self.read_spangroups()
-            if groups is not None:
-                num_groups = len(groups.keys())
-        dlg = BrowsePaths(self, multiple_image_area, self.defdir, num_groups)
+    def _choose_native_sources(self, *, folders=False, multiple=False, title="Choose wallpaper images"):
+        """Use KDE's file picker on Plasma and an OS file picker elsewhere."""
+        directory = self.defdir if os.path.isdir(self.defdir) else os.path.expanduser("~")
         try:
-            if dlg.ShowModal() == wx.ID_OK:
-                self.defdir = dlg.defdir
-                self.populate_lc_browse(dlg.path_list_data, dlg.il)
-                self._studio_refresh_image_card()
-        finally:
-            dlg.Destroy()
+            sources = pick_kde_paths(directory, folders=folders, multiple=multiple, title=title)
+        except NativePickerError as exc:
+            sp_logging.G_LOGGER.warning("KDE file picker failed; using native wx file dialog: %s", exc)
+            sources = None
+
+        # None means the KDE picker was unavailable, not that the user pressed Cancel.
+        if sources is None:
+            if folders:
+                with wx.DirDialog(
+                    self, title, defaultPath=directory, style=wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST
+                ) as picker:
+                    sources = [picker.GetPath()] if picker.ShowModal() == wx.ID_OK else []
+            else:
+                wildcard = (
+                    "Images (*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.webp)|"
+                    "*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.webp"
+                )
+                flags = wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
+                if multiple:
+                    flags |= wx.FD_MULTIPLE
+                with wx.FileDialog(self, title, defaultDir=directory, wildcard=wildcard, style=flags) as picker:
+                    if picker.ShowModal() == wx.ID_OK:
+                        sources = picker.GetPaths() if multiple else [picker.GetPath()]
+                    else:
+                        sources = []
+
+        valid = []
+        for source in sources:
+            if (folders and os.path.isdir(source)) or (
+                not folders and os.path.isfile(source) and source.lower().endswith(IMAGE_EXTENSIONS)
+            ):
+                valid.append(os.path.abspath(source))
+            else:
+                kind = "folder" if folders else "image"
+                wx.MessageBox(
+                    f"Not a supported local wallpaper {kind}: {source}",
+                    "Invalid wallpaper source",
+                    wx.OK | wx.ICON_WARNING,
+                    self,
+                )
+        if valid:
+            last_directory = valid[-1] if folders else os.path.dirname(valid[-1])
+            self.defdir = last_directory
+            settings = GeneralSettingsData()
+            if settings.browse_default_dir != last_directory:
+                settings.browse_default_dir = last_directory
+                settings.save_settings()
+        return valid
+
+    def _choose_source_target(self, selected_row=-1):
+        """Keep the existing target or ask which monitor/group receives images."""
+        if not (self.use_multi_image or self.use_spangroups()):
+            return ""
+        if selected_row >= 0:
+            return self.path_listctrl.GetItemText(selected_row, 0)
+        if self.use_spangroups():
+            targets = [str(group) for group in sorted(self.read_spangroups())]
+            label = "span group"
+        else:
+            targets = [str(display) for display in range(len(self.display_sys.disp_list))]
+            label = "display"
+        if not targets:
+            return None
+        if len(targets) == 1:
+            return targets[0]
+        choices = [f"{label.title()} {target}" for target in targets]
+        with wx.SingleChoiceDialog(
+            self, f"Choose a {label} for these images:", "Wallpaper target", choices
+        ) as picker:
+            if picker.ShowModal() != wx.ID_OK:
+                return None
+            return targets[picker.GetSelection()]
+
+    def _preview_source_path(self, path):
+        """Update the real wallpaper preview without saving or applying."""
+        if os.path.isdir(path):
+            candidate = next(
+                (
+                    os.path.join(path, name)
+                    for name in sorted(os.listdir(path))
+                    if name.lower().endswith(wpproc.G_SUPPORTED_IMAGE_EXTENSIONS)
+                ),
+                None,
+            )
+        else:
+            candidate = path
+        if candidate is None:
+            return
+        display_data = self.display_sys.get_disp_list(self.show_advanced_settings)
+        self.wpprev_pnl.preview_wallpaper(
+            [candidate],
+            self.show_advanced_settings,
+            self.use_multi_image,
+            display_data,
+            self.read_spangroups(True),
+        )
+        self._studio_refresh_image_card()
+
+    def onChangeImage(self, event):
+        """Replace a selected wallpaper image with a native file chooser."""
+        paths = self._choose_native_sources(title="Change wallpaper image")
+        if not paths:
+            return
+        path = paths[0]
+        columns = self.path_listctrl.GetColumnCount()
+        row = self.path_listctrl.GetFirstSelected()
+        target = self._choose_source_target(row)
+        if target is None:
+            return
+        if row < 0:
+            # Without an explicit row, replace only this monitor/group's first
+            # source and preserve all other targets and slideshow entries.
+            for index in range(self.path_listctrl.GetItemCount()):
+                existing_target = self.path_listctrl.GetItemText(index, 0) if columns == 2 else ""
+                if existing_target == target:
+                    row = index
+                    break
+        candidate = source_identity(path, target)
+        for index in range(self.path_listctrl.GetItemCount()):
+            if index == row:
+                continue
+            existing_target = self.path_listctrl.GetItemText(index, 0) if columns == 2 else ""
+            existing_path = self.path_listctrl.GetItemText(index, columns - 1)
+            if source_identity(existing_path, existing_target) == candidate:
+                self.studio_status.SetLabel("That image is already in the selected wallpaper sources.")
+                return
+        if row >= 0:
+            self.path_listctrl.DeleteItem(row)
+        self.append_to_listctrl([target, path] if columns == 2 else [path])
+        for index in range(self.path_listctrl.GetItemCount()):
+            existing_target = self.path_listctrl.GetItemText(index, 0) if columns == 2 else ""
+            existing_path = self.path_listctrl.GetItemText(index, columns - 1)
+            if source_identity(existing_path, existing_target) == candidate:
+                self.path_listctrl.Select(index)
+                break
+        self._preview_source_path(path)
+        self._update_dirty_state()
+
+    def onBrowsePaths(self, event):
+        """Add source images using the desktop file chooser, never a tree dialog."""
+        paths = self._choose_native_sources(multiple=True, title="Add wallpaper images")
+        if not paths:
+            return
+        target = self._choose_source_target()
+        if target is None:
+            return
+        columns = self.path_listctrl.GetColumnCount()
+        for path in paths:
+            self.append_to_listctrl([target, path] if columns == 2 else [path])
+        self._preview_source_path(paths[-1])
+        self._update_dirty_state()
+
+    def onAddFolderSource(self, event):
+        """Choose a slideshow/source directory in the native folder picker."""
+        paths = self._choose_native_sources(folders=True, title="Add wallpaper source folder")
+        if not paths:
+            return
+        target = self._choose_source_target()
+        if target is None:
+            return
+        columns = self.path_listctrl.GetColumnCount()
+        for path in paths:
+            self.append_to_listctrl([target, path] if columns == 2 else [path])
+        self._preview_source_path(paths[-1])
+        self._update_dirty_state()
 
     def onRemoveSource(self, event):
         """Remove every selected source, not only the focused row."""
