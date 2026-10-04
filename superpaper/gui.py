@@ -844,6 +844,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         selected = self.studio_monitor_choice.GetSelection()
         self.studio_monitor_choice.SetItems(["All monitors", *[f"Monitor {i + 1}" for i in range(count)]])
         self.studio_monitor_choice.SetSelection(min(max(selected, 0), count))
+        self.wpprev_pnl.focus_monitor = self.studio_monitor_choice.GetSelection()
 
     def _studio_choose_monitor(self, event):
         self.wpprev_pnl.focus_monitor = self.studio_monitor_choice.GetSelection()
@@ -2194,6 +2195,23 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.cb_hotkey.SetValue(False)
         self.tc_hotkey_bind.ChangeValue("")
         self.onCheckboxHotkey(None)
+
+        self.reset_zoom_offset()
+        self.cb_cloud_upscale.SetValue(False)
+        self.ch_cloud_scale.SetSelection(0)
+        self.sld_cloud_sharpen.SetValue(0)
+        self.st_cloud_sharpen.SetLabel("0")
+        self.wpprev_pnl.sharpen = 0
+        self.wpprev_pnl.tone = (0, 0, 0)
+        for key in ("brightness", "contrast", "saturation"):
+            self.studio_tone_controls[key].SetValue(0)
+            self.studio_tone_labels[key].SetLabel("0")
+        self._refresh_local_shader_options("")
+        self._sync_cloud_quality_controls()
+        self.studio_compare.SetValue(False)
+        self.wpprev_pnl.compare_original = False
+        self.studio_monitor_choice.SetSelection(0)
+        self.wpprev_pnl.focus_monitor = 0
 
         # refresh wallpaper preview back to black previews
         self.wpprev_pnl.draw_displays()
