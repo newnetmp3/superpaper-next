@@ -166,3 +166,57 @@ def test_apply_handler_never_updates_live_profile_selection(profile_modules, tmp
     assert rendered == [[newer]]
     assert live.selected == [old]
     assert saved_path.read_bytes() == before
+
+
+def test_identical_source_lists_use_distinct_display_indices(profile_modules, tmp_path):
+    data, _ = profile_modules
+    shared = image(tmp_path, "shared.png")
+    profile = working_profile(data, "duplicate-groups", [[shared], [shared]], spanmode="multi", selected=[shared, shared])
+    serialized = profile._serialize()
+    assert f"display0paths={shared}" in serialized
+    assert f"display1paths={shared}" in serialized
+    assert serialized.count("display0paths=") == 1
+    assert serialized.count("display1paths=") == 1
+
+
+def test_preview_uses_same_complete_selection_as_multi_monitor_renderer(tmp_path):
+    path = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    klass = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperSettingsPanel")
+    handler = next(node for node in klass.body if isinstance(node, ast.FunctionDef) and node.name == "_preview_source_path")
+    namespace = {"os": os, "wpproc": SimpleNamespace(G_SUPPORTED_IMAGE_EXTENSIONS=(".png",))}
+    exec(compile(ast.Module(body=[handler], type_ignores=[]), "<preview-handler>", "exec"), namespace)
+    left = image(tmp_path, "left.png")
+    right = image(tmp_path, "right.png")
+    previews = []
+    panel = SimpleNamespace(
+        _collect_temp_profile=lambda resolve_selection: (SimpleNamespace(selected=[left, right]), None),
+        display_sys=SimpleNamespace(get_disp_list=lambda advanced: ["monitor0", "monitor1"]),
+        show_advanced_settings=False,
+        use_multi_image=True,
+        read_spangroups=lambda include_all: None,
+        wpprev_pnl=SimpleNamespace(preview_wallpaper=lambda *args: previews.append(args)),
+        _studio_refresh_image_card=lambda: None,
+    )
+    namespace["_preview_source_path"](panel, right)
+    assert previews
+    assert previews[0][0] == [left, right]
+    assert previews[0][2] is True
+
+
+def test_advanced_group_selection_survives_profile_round_trip(profile_modules, monkeypatch, tmp_path):
+    data, wpproc = profile_modules
+    monkeypatch.setattr(wpproc, "NUM_DISPLAYS", 3)
+    group_a = image(tmp_path, "group-a.png")
+    group_b = image(tmp_path, "group-b.png")
+    chosen = resolved_wallpaper_selections(
+        [[group_a], [group_b]], [group_a, group_b], {"2": group_b}, targets=["0", "2"]
+    )
+    profile = working_profile(data, "advanced", [[group_a], [group_b]], spanmode="advanced", selected=chosen)
+    profile.spangroups = "01,2"
+    output = tmp_path / "advanced.profile"
+    profile.save(filename=output)
+    reloaded = data.ProfileData(output)
+    assert reloaded.spangroups == [[0, 1], [2]]
+    assert reloaded.selected == [group_a, group_b]
+    assert reloaded.next_wallpaper_files() == [group_a, group_b]
