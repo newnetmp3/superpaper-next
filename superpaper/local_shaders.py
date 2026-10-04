@@ -210,11 +210,11 @@ def shader_output_size(image_size, target_size, zoom, shader_name):
 
 
 def shader_filtergraph(dimensions, hook, variant):
-    """Build a Vulkan libplacebo graph compatible with recent and older FFmpeg.
+    """Build software-input or explicit-hardware-frame libplacebo filtergraphs.
 
-    Modern libplacebo handles software-frame upload/output itself. The older
-    hwupload/hwdownload route is kept as a fallback for distro FFmpeg builds
-    which require explicit hardware frames.
+    With direct software input, libplacebo should create its own Vulkan device.
+    Passing a globally initialized FFmpeg device changes initialization to
+    Vulkan device *import*, which can fail on libplacebo/FFmpeg ABI combinations.
     """
     width, height = dimensions
     effect = f"libplacebo=w={width}:h={height}:custom_shader_path={hook}"
@@ -258,18 +258,14 @@ def shader_error_detail(stderr):
     return "\n".join(useful)[:4000]
 
 
+def ffmpeg_vulkan_device_options(explicit):
+    """Only import a FFmpeg Vulkan context for the legacy hwupload fallback."""
+    return ["-init_hw_device", "vulkan=vk", "-filter_hw_device", "vk"] if explicit else []
+
+
 def diagnose_ffmpeg_backend(ffmpeg):
-    """Test bare Vulkan/libplacebo without shaders to separate GPU from GLSL faults."""
-    command = [
-        ffmpeg,
-        "-nostdin",
-        "-hide_banner",
-        "-loglevel",
-        "verbose",
-        "-init_hw_device",
-        "vulkan=vk",
-        "-filter_hw_device",
-        "vk",
+    """Distinguish libplacebo-managed Vulkan from FFmpeg's device import path."""
+    common = [
         "-f",
         "lavfi",
         "-i",
@@ -282,13 +278,30 @@ def diagnose_ffmpeg_backend(ffmpeg):
         "null",
         "-",
     ]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=20)
-    except (OSError, subprocess.SubprocessError) as exc:
-        return "Baseline FFmpeg Vulkan test could not run: " + str(exc)
-    if result.returncode:
-        return "Baseline libplacebo/Vulkan failed without Anime4K: " + shader_error_detail(result.stderr)
-    return "Baseline libplacebo/Vulkan succeeded: check selected GLSL hook compatibility and pixel format."
+    failures = []
+    for explicit in (False, True):
+        mode = "external FFmpeg Vulkan device" if explicit else "libplacebo-managed Vulkan"
+        command = [
+            ffmpeg,
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "verbose",
+            *ffmpeg_vulkan_device_options(explicit),
+            *common,
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=20)
+        except (OSError, subprocess.SubprocessError) as exc:
+            failures.append(f"{mode}: {exc}")
+            continue
+        if result.returncode == 0:
+            return (
+                f"Baseline {mode} succeeded without Anime4K; "
+                "investigate GLSL parsing or image format instead."
+            )
+        failures.append(f"{mode}: {shader_error_detail(result.stderr)}")
+    return "Baseline libplacebo failed without Anime4K:\n" + "\n".join(failures)
 
 
 def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, shader_root=None):
@@ -322,7 +335,7 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
         for shader in shaders:
             digest.update(shader.name.encode())
             digest.update(shader.read_bytes())
-        digest.update(f"{name}:{dimensions}:libplacebo-mpv-chain-v1".encode())
+        digest.update(f"{name}:{dimensions}:libplacebo-mpv-chain-v2".encode())
         cache = Path(cache_root) if cache_root is not None else Path(tempfile.gettempdir())
         cache = cache / "local-shader-output" / (digest.hexdigest() + ".png")
         if cache.is_file():
@@ -343,9 +356,10 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
             # complete text retains each pass and its defined execution order.
             hook.write_bytes(b"\n\n".join(shader.read_bytes() for shader in shaders) + b"\n")
             image.convert("RGB").save(src)
-            # Attempt the modern direct libplacebo software-frame input
-            # first. Not all FFmpeg builds support the explicit hwupload path
-            # previously used (which can fail during filter initialization).
+            # Prefer libplacebo-managed Vulkan. Passing FFmpeg's -init_hw_device
+            # forces a separate Vulkan device-import path (potentially broken
+            # when FFmpeg's queue flags need a newer libplacebo API). Only the
+            # legacy hwupload fallback needs explicit FFmpeg device selection.
             rendered = False
             for variant in _SHADER_RENDER_VARIANTS:
                 output.unlink(missing_ok=True)
@@ -356,10 +370,7 @@ def apply_image_shader(image, name, target_size, *, zoom=1.0, cache_root=None, s
                     "-loglevel",
                     "verbose",
                     "-y",
-                    "-init_hw_device",
-                    "vulkan=vk",
-                    "-filter_hw_device",
-                    "vk",
+                    *ffmpeg_vulkan_device_options(variant == "hardware-upload"),
                     "-i",
                     str(src),
                     "-vf",
