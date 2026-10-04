@@ -28,11 +28,7 @@ def test_geometry_is_independent_of_gui_and_wallpaper_setter():
     directory = Path(__file__).resolve().parents[1] / "superpaper"
     for filename in ("monitor_geometry.py", "image_framing.py"):
         source = (directory / filename).read_text(encoding="utf-8")
-        imports = [
-            node
-            for node in ast.walk(ast.parse(source))
-            if isinstance(node, (ast.Import, ast.ImportFrom))
-        ]
+        imports = [node for node in ast.walk(ast.parse(source)) if isinstance(node, (ast.Import, ast.ImportFrom))]
         imported_names = " ".join(ast.unparse(node) for node in imports)
         assert "gui" not in imported_names
         assert "wx" not in imported_names
@@ -82,7 +78,9 @@ def test_dialog_families_live_in_dedicated_files():
 def test_gui_still_exports_existing_studio_controls():
     root = Path(__file__).resolve().parents[1] / "superpaper"
     gui = (root / "gui.py").read_text(encoding="utf-8")
-    assert "from superpaper.studio_widgets import StudioActionButton, StudioNavigationButton, StudioSegmentButton" in gui
+    assert (
+        "from superpaper.studio_widgets import StudioActionButton, StudioNavigationButton, StudioSegmentButton" in gui
+    )
     assert "class WallpaperSettingsPanel(wx.ScrolledWindow):" in gui
     assert "from superpaper.wallpaper_preview_panel import WallpaperPreviewPanel" in gui
     preview = (root / "wallpaper_preview_panel.py").read_text(encoding="utf-8")
