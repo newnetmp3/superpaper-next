@@ -47,7 +47,7 @@ from superpaper.preview_geometry import (
     wheel_scroll_units,
 )
 from superpaper.profile_id import ProfileId, ProfileIdError
-from superpaper.source_paths import IMAGE_EXTENSIONS, source_identity
+from superpaper.source_paths import IMAGE_EXTENSIONS, resolved_wallpaper_selections, source_identity
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
 from superpaper.wallpaper_processing import (
     change_wallpaper_job,
@@ -221,6 +221,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.current_profile_id = None
         self.expected_source_identity = None
         self.loaded_profile = None
+        # Explicit source replacement is separate from wx.ListCtrl focus, which
+        # GTK does not reliably transfer when Select(index) is called.
+        self._pending_source_replacements = {}
         self.sizer_main = wx.BoxSizer(wx.HORIZONTAL)
         self.sizer_top_half = wx.BoxSizer(wx.HORIZONTAL)
         self.SetBackgroundColour(wx.Colour(17, 27, 41))  # wallpaper/monitor preview
@@ -1524,6 +1527,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.current_profile_id = profile.profile_id
         self.expected_source_identity = profile.source_identity
         self.loaded_profile = profile
+        self._pending_source_replacements.clear()
         self.tc_name.ChangeValue(profile.name)
 
         self.show_advanced_settings = False
@@ -2580,8 +2584,16 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             existing_target = self.path_listctrl.GetItemText(index, 0) if columns == 2 else ""
             existing_path = self.path_listctrl.GetItemText(index, columns - 1)
             if source_identity(existing_path, existing_target) == candidate:
-                self.path_listctrl.Select(index)
+                self.path_listctrl.SetItemState(
+                    index,
+                    wx.LIST_STATE_SELECTED | wx.LIST_STATE_FOCUSED,
+                    wx.LIST_STATE_SELECTED | wx.LIST_STATE_FOCUSED,
+                )
                 break
+        # The renderer uses the serialized profile's selected= entry. Store
+        # the explicit choice in the correct display/group slot even when GTK
+        # leaves an older row with keyboard focus or multiple images are used.
+        self._pending_source_replacements[target] = path
         self._preview_source_path(path)
         self._update_dirty_state()
 
@@ -2711,8 +2723,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             del busy
 
     def _get_selected_wallpaper_path(self):
-        """Get the file path of the currently selected item in the wallpaper list."""
-        item_idx = self.path_listctrl.GetFocusedItem()
+        """Get the selected source; GTK's focused item may be different."""
+        item_idx = self.path_listctrl.GetFirstSelected()
+        if item_idx == -1:
+            item_idx = self.path_listctrl.GetFocusedItem()
         if item_idx == -1:
             return None
         columns = self.path_listctrl.GetColumnCount()
@@ -2865,6 +2879,14 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 semicol_sep_paths = ";".join(paths_dict[disp_id])
                 tmp_profile.paths_array.append(semicol_sep_paths)
 
+        if resolve_selection and self._pending_source_replacements:
+            previous = self.loaded_profile.selected if self.loaded_profile is not None else None
+            tmp_profile.selected = resolved_wallpaper_selections(
+                [paths.split(";") for paths in tmp_profile.paths_array],
+                previous,
+                self._pending_source_replacements,
+            )
+
         return tmp_profile, groups
 
     def onSave(self, event):
@@ -2929,6 +2951,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.current_profile_id = saved_profile.profile_id
             self.expected_source_identity = saved_profile.source_identity
             self.loaded_profile = saved_profile
+            self._pending_source_replacements.clear()
             if self.show_advanced_settings:
                 display_data = self.display_sys.get_disp_list(True)
             else:
@@ -2961,6 +2984,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.current_profile_id = None
         self.expected_source_identity = None
         self.loaded_profile = None
+        self._pending_source_replacements.clear()
         self.choice_profiles.SetSelection(self.choice_profiles.FindString("Create a new profile"))
 
         self.tc_name.ChangeValue("")
