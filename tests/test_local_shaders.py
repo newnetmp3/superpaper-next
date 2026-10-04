@@ -227,9 +227,7 @@ def test_mpv_pipeline_helpers_are_not_standalone_preset_options(tmp_path):
     choices = local_shaders.available_shaders(shader_root=shader_root)
     assert NAME in choices
     assert "Anime4K_AutoDownscalePre_x2.glsl" not in choices
-    assert local_shaders.resolve_shader_chain(
-        "Anime4K_AutoDownscalePre_x2.glsl", shader_root=shader_root
-    ) == ()
+    assert local_shaders.resolve_shader_chain("Anime4K_AutoDownscalePre_x2.glsl", shader_root=shader_root) == ()
 
 
 def test_preset_modes_resolve_ordered_real_mpv_files(tmp_path):
@@ -315,9 +313,9 @@ def test_ffmpeg_failure_diagnoses_vulkan_without_anime4k(tmp_path, monkeypatch):
     monkeypatch.setattr(local_shaders.subprocess, "run", render)
     assert local_shaders._validate_entry("Anime4K_Mode_A", HOOK) is None
     source = Image.new("RGB", (30, 20), "pink")
-    assert local_shaders.apply_image_shader(
-        source, NAME, (60, 40), shader_root=installed, cache_root=tmp_path
-    ) is source
+    assert (
+        local_shaders.apply_image_shader(source, NAME, (60, 40), shader_root=installed, cache_root=tmp_path) is source
+    )
     assert len(commands) == 3
     assert "color=c=gray:s=64x64:d=0.1" in commands[-1]
     assert "libplacebo=w=64:h=64" in commands[-1]
