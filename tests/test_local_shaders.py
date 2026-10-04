@@ -10,7 +10,6 @@ from PIL import Image
 
 from superpaper import local_shaders
 
-
 HOOK = b"// MIT License\n//!HOOK MAIN\n//!BIND HOOKED\nvec4 hook() { return HOOKED_tex(HOOKED_pos); }\n"
 NAME = "Anime4K_Restore_CNN_S.glsl"
 

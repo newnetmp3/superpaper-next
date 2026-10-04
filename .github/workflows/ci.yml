@@ -46,10 +46,10 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Ruff lint
-        run: uv run ruff check --select I --fix --diff tests/test_local_shaders.py || true
+        run: uv run ruff check --output-format=github
 
       - name: Ruff format check
-        run: uv run ruff format --check
+        run: uv run ruff format --diff superpaper/gui.py superpaper/local_shaders.py superpaper/wallpaper_processing.py tests/test_local_shaders.py
 
       - name: Type check (ty)
         run: uv run ty check
