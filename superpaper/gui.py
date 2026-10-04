@@ -157,6 +157,19 @@ class StudioActionButton(StudioNavigationButton):
         dc.DrawText(self.label, max(0, (w - text_w) // 2), max(0, (h - text_h) // 2))
 
 
+class StudioSegmentButton(StudioActionButton):
+    """Compact painted tabs that retain keyboard and mouse button semantics."""
+
+    def __init__(self, parent, label):
+        super().__init__(parent, label)
+        # Two columns fit inside the 294px Processing inspector on GTK.
+        self.SetMinSize(wx.Size(112, 35))
+
+    def SetSelected(self, selected):
+        self.primary = bool(selected)
+        super().SetSelected(selected)
+
+
 class StudioComparisonPanel(wx.Panel):
     """Paint a local image comparison at the available workspace width."""
 
@@ -538,11 +551,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_setting_processing = wx.StaticBoxSizer(wx.VERTICAL, self, "Image processing and effects")
         processing_parent = self.sizer_setting_processing.GetStaticBox()
         self.processing_tab_buttons = {}
-        processing_tabs = wx.BoxSizer(wx.HORIZONTAL)
+        # Avoid four cramped native GTK toggles overflowing this narrow inspector.
+        # The painted two-column group uses the same visual language as navigation.
+        processing_tabs = wx.GridSizer(2, 2, 5, 5)
         for name in ("Basic", "Cloud AI", "Shaders", "Adjustments"):
-            tab = wx.ToggleButton(processing_parent, label=name)
-            tab.Bind(wx.EVT_TOGGLEBUTTON, lambda event, section=name: self._set_processing_tab(section))
-            processing_tabs.Add(tab, 1, wx.EXPAND | wx.RIGHT, 3)
+            tab = StudioSegmentButton(processing_parent, name)
+            tab.Bind(wx.EVT_BUTTON, lambda event, section=name: self._set_processing_tab(section))
+            processing_tabs.Add(tab, 0, wx.EXPAND)
             self.processing_tab_buttons[name] = tab
         self.sizer_setting_processing.Add(processing_tabs, 0, wx.EXPAND | wx.ALL, 5)
         self.sizer_processing_cloud = wx.BoxSizer(wx.VERTICAL)
@@ -1055,7 +1070,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             wx.StaticText(self, label="Alignment"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
         )
         for caption, position in (("Left", -100), ("Center", 0), ("Right", 100)):
-            button = wx.Button(self, label=caption, size=wx.Size(66, -1))
+            button = StudioActionButton(self, caption)
             button.SetToolTip(f"Align the image crop to the {caption.lower()}.")
             button.Bind(wx.EVT_BUTTON, lambda event, amount=position: self._studio_align_image(amount))
             self.studio_alignment_tools.Add(button, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
@@ -2137,9 +2152,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         cloud, shaders, local = panels[name]
         for button_name, button in self.processing_tab_buttons.items():
             selected = name == button_name
-            button.SetValue(selected)
-            button.SetBackgroundColour(wx.Colour(37, 109, 205) if selected else wx.Colour(35, 48, 65))
-            button.SetForegroundColour(wx.Colour(245, 249, 255))
+            button.SetSelected(selected)
         self.sizer_setting_processing.Show(self.sizer_processing_cloud, show=cloud, recursive=True)
         self.sizer_setting_processing.Show(self.sizer_processing_shaders, show=shaders, recursive=True)
         self.sizer_setting_processing.Show(self.sizer_processing_local, show=local, recursive=True)

@@ -217,6 +217,25 @@ def test_shader_dropdown_starts_with_modes_and_hides_individual_hooks():
     assert "self._update_dirty_state()" not in toggle
 
 
+def test_processing_tabs_are_painted_and_fit_the_narrow_inspector():
+    build = _method("WallpaperSettingsPanel", "create_sizer_settings_left")
+    assert "wx.GridSizer(2, 2, 5, 5)" in build
+    assert "StudioSegmentButton(processing_parent, name)" in build
+    assert "tab.Bind(wx.EVT_BUTTON" in build
+    assert "wx.ToggleButton(processing_parent" not in build
+    switch = _method("WallpaperSettingsPanel", "_set_processing_tab")
+    assert "button.SetSelected(selected)" in switch
+    assert "button.SetValue(selected)" not in switch
+    segment_init = _method("StudioSegmentButton", "__init__")
+    segment_select = _method("StudioSegmentButton", "SetSelected")
+    assert "wx.Size(112, 35)" in segment_init
+    assert "self.primary = bool(selected)" in segment_select
+    assert "super().SetSelected(selected)" in segment_select
+    navigation = _method("WallpaperSettingsPanel", "create_studio_navigation")
+    assert "StudioActionButton(self, caption)" in navigation
+    assert "self._studio_align_image(amount)" in navigation
+
+
 def test_cloud_checkbox_cannot_push_reset_view_into_processing_inspector():
     navigation = _method("WallpaperSettingsPanel", "create_studio_navigation")
     assert "self.studio_preview_tools = wx.BoxSizer(wx.VERTICAL)" in navigation
