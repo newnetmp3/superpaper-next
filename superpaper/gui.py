@@ -423,7 +423,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.cb_cloud_upscale.Bind(wx.EVT_CHECKBOX, self._on_cloud_upscale_changed)
         self.sizer_processing_cloud.Add(self.cb_cloud_upscale, 0, wx.ALL, 5)
 
-        cloud_grid = wx.FlexGridSizer(2, 3, 5, 5)
+        cloud_grid = wx.FlexGridSizer(1, 3, 5, 5)
         cloud_grid.AddGrowableCol(1, 1)
         cloud_scale_label = wx.StaticText(processing_parent, -1, "AI model:")
         self.ch_cloud_scale = wx.Choice(processing_parent, choices=["Auto (when needed)", "2x", "4x", "8x"])
@@ -447,9 +447,6 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             "The preview uses the original image; changing sharpness never spends cloud credits."
         )
         self.sld_cloud_sharpen.Bind(wx.EVT_SLIDER, self._on_cloud_quality_changed)
-        cloud_grid.Add(cloud_sharpen_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
-        cloud_grid.Add(self.sld_cloud_sharpen, 1, wx.EXPAND)
-        cloud_grid.Add(self.st_cloud_sharpen, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
         self.sizer_processing_cloud.Add(cloud_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
         self._sync_cloud_quality_controls()
 
@@ -486,6 +483,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             wx.LEFT | wx.TOP | wx.BOTTOM,
             8,
         )
+        sharpen_grid = wx.FlexGridSizer(1, 3, 5, 5)
+        sharpen_grid.AddGrowableCol(1, 1)
+        sharpen_grid.Add(cloud_sharpen_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
+        sharpen_grid.Add(self.sld_cloud_sharpen, 1, wx.EXPAND)
+        sharpen_grid.Add(self.st_cloud_sharpen, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        self.sizer_processing_local.Add(sharpen_grid, 0, wx.EXPAND | wx.ALL, 5)
         self.studio_tone_controls = {}
         self.studio_tone_labels = {}
         tone_grid = wx.FlexGridSizer(3, 3, 6, 6)
