@@ -37,6 +37,7 @@ from superpaper.local_shaders import ShaderImportError, available_shaders, impor
 from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import (
     crop_overflow,
+    desktop_preview_layout,
     fit_preview_canvas,
     has_positive_area,
     pan_offset_for_drag,
@@ -1003,6 +1004,14 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_preview_tools.Add(
             wx.StaticText(self, label="Preview view:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
         )
+        self.studio_desktop_layout = wx.CheckBox(self, label="Desktop layout")
+        self.studio_desktop_layout.SetValue(True)
+        self.studio_desktop_layout.SetToolTip(
+            "Show the actual virtual-desktop monitor positions and gaps, as in a full Spectacle screenshot. "
+            "Turn off to inspect the physical PPI/bezel arrangement."
+        )
+        self.studio_desktop_layout.Bind(wx.EVT_CHECKBOX, self._studio_toggle_desktop_layout)
+        self.studio_preview_tools.Add(self.studio_desktop_layout, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
         self.studio_monitor_choice = wx.Choice(self, choices=["All monitors"])
         self.studio_monitor_choice.SetSelection(0)
         self.studio_monitor_choice.Bind(wx.EVT_CHOICE, self._studio_choose_monitor)
@@ -1155,6 +1164,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
+        self.studio_desktop_layout.Enable(name != "Displays")
+        self.wpprev_pnl.set_desktop_layout(name not in ("Displays", "Profiles") and self.studio_desktop_layout.GetValue())
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
         self.studio_canvas_column.Show(self.studio_quick_profiles, show=name == "Wallpapers", recursive=True)
         self.studio_canvas_column.Show(self.studio_processing_preview, show=name == "Processing", recursive=True)
@@ -1285,6 +1296,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
     def _studio_choose_monitor(self, event):
         self.wpprev_pnl.focus_monitor = self.studio_monitor_choice.GetSelection()
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+
+    def _studio_toggle_desktop_layout(self, event):
+        """Switch between applied desktop geometry and physical calibration."""
+        if self._workspace == "Displays":
+            return
+        self.wpprev_pnl.set_desktop_layout(self.studio_desktop_layout.GetValue())
 
     def create_studio_gallery(self):
         """Use real clickable thumbnail cards, not the platform's icon-list view."""
@@ -3020,9 +3037,15 @@ class WallpaperPreviewPanel(wx.Panel):
         self._last_use_multi = use_multi_image
         self._last_spangroups = None
         self._background_drag = None
+        self.desktop_layout_enabled = False
+        self._raw_preview_bmps = []
 
         # Draw preview
         self.draw_displays()
+        # Separate image surface showing precisely where the virtual desktop
+        # monitors begin/end. The existing bitmaps remain for physical editing.
+        self.desktop_preview = wx.StaticBitmap(self, bitmap=wx.Bitmap(1, 1))
+        self.desktop_preview.Hide()
 
         # Create bezel buttons for displays in preview
         self.bez_buttons = []
@@ -3034,6 +3057,9 @@ class WallpaperPreviewPanel(wx.Panel):
         self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self._on_background_capture_lost)
         self.bind_background_drag()
         self.bind_wallpaper_bitmap_drag()
+        self.desktop_preview.Bind(wx.EVT_LEFT_DOWN, self._on_background_down)
+        self.desktop_preview.Bind(wx.EVT_LEFT_UP, self._on_background_up)
+        self.desktop_preview.Bind(wx.EVT_MOTION, self._on_background_motion)
         self.SetToolTip("Drag the image to reposition it; zoom in for more movement.")
 
     def preview_area_ready(self):
@@ -3213,6 +3239,7 @@ class WallpaperPreviewPanel(wx.Panel):
         self.refresh_preview(use_ppi_px)
         image_list = self.current_preview_images
         if not image_list:
+            self.desktop_preview.Hide()
             self.resize_displays(use_ppi_px)
             self.Refresh()
             return
@@ -3286,10 +3313,76 @@ class WallpaperPreviewPanel(wx.Panel):
                 crop = safe_sub_bitmap(bmp_clr, wx.Rect(pos, sz))
                 st_bmp.SetBitmap(crop)
                 # st_bmp.Show()
+        # Preserve the unlabelled per-monitor images. The virtual desktop
+        # preview repositions these same crops at actual OS monitor offsets.
+        self._raw_preview_bmps = [bitmap.GetBitmap() for bitmap in self.preview_img_list]
         for index, bitmap in enumerate(self.preview_img_list):
             bitmap.Show(self.focus_monitor == 0 or index == self.focus_monitor - 1)
         self.draw_monitor_numbers(use_ppi_px)
+        self._update_desktop_preview()
         self.Refresh()
+
+    def set_desktop_layout(self, enabled):
+        """Switch between final OS geometry and the physical calibration view."""
+        self.desktop_layout_enabled = bool(enabled)
+        self._update_desktop_preview()
+
+    def _desktop_preview_rectangles(self):
+        """Project real digital monitor offsets into this preview's viewport."""
+        displays = [(dsp.resolution, dsp.digital_offset) for dsp in self.display_sys.disp_list]
+        return desktop_preview_layout(displays, self.GetClientSize())
+
+    def _update_desktop_preview(self):
+        """Recompose only cached local preview crops; never invoke Cloud AI."""
+        if not self.desktop_layout_enabled or self.config_mode or self.bezel_conifg_mode:
+            self.desktop_preview.Hide()
+            for index, bitmap in enumerate(self.preview_img_list):
+                bitmap.Show(self.focus_monitor == 0 or index == self.focus_monitor - 1)
+            return
+        if not self._raw_preview_bmps or not self.preview_area_ready():
+            self.desktop_preview.Hide()
+            return
+        try:
+            canvas_size, canvas_pos, rectangles = self._desktop_preview_rectangles()
+        except ValueError:
+            return
+        output = wx.Bitmap.FromRGBA(canvas_size[0], canvas_size[1], red=25, green=30, blue=39, alpha=255)
+        dc = wx.MemoryDC(output)
+        try:
+            for index, ((x, y, width, height), picture) in enumerate(zip(rectangles, self._raw_preview_bmps)):
+                if self.focus_monitor != 0 and index != self.focus_monitor - 1:
+                    continue
+                resized = picture.ConvertToImage().Scale(width, height, wx.IMAGE_QUALITY_HIGH).ConvertToBitmap()
+                dc.DrawBitmap(resized, x - canvas_pos[0], y - canvas_pos[1])
+                dc.SetBrush(wx.TRANSPARENT_BRUSH)
+                dc.SetPen(wx.Pen(wx.Colour(86, 145, 217), 1))
+                dc.DrawRectangle(x - canvas_pos[0], y - canvas_pos[1], width, height)
+                dc.SetFont(wx.Font(9, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+                label = f"Monitor {index + 1}"
+                label_w, label_h = dc.GetTextExtent(label)
+                dc.SetPen(wx.TRANSPARENT_PEN)
+                dc.SetBrush(wx.Brush(wx.Colour(26, 40, 61)))
+                dc.DrawRoundedRectangle(x - canvas_pos[0] + 6, y - canvas_pos[1] + 7, label_w + 15, label_h + 9, 4)
+                dc.SetTextForeground(wx.Colour(245, 249, 255))
+                dc.DrawText(label, x - canvas_pos[0] + 13, y - canvas_pos[1] + 11)
+        finally:
+            dc.SelectObject(wx.NullBitmap)
+        self.desktop_preview.SetBitmap(output)
+        self.desktop_preview.SetPosition(wx.Point(*canvas_pos))
+        self.desktop_preview.Show()
+        self.desktop_preview.Raise()
+        # Configuration/help controls must remain reachable above the image.
+        for button in (
+            self.button_config,
+            self.button_save,
+            self.button_reset,
+            self.button_cancel,
+            self.button_entry,
+            self.button_help,
+        ):
+            button.Raise()
+        for bitmap in self.preview_img_list:
+            bitmap.Hide()
 
     def update_zoom_offset(self, zoom, offset):
         """Re-render the current preview with new zoom & offset values."""
@@ -3556,6 +3649,8 @@ class WallpaperPreviewPanel(wx.Panel):
 
     def onConfigure(self, evt):
         """Start diplay position config mode."""
+        self.set_desktop_layout(False)
+        self.frame.studio_desktop_layout.SetValue(False)
         self.old_ppinorm_offs = self.display_sys.get_ppinorm_offsets()  # back up the offsets
         self.frame.toggle_radio_and_profile_choice(False)
         self.frame.toggle_bezel_buttons(False, False)
@@ -3851,6 +3946,12 @@ class WallpaperPreviewPanel(wx.Panel):
     def _drag_target(self, point):
         """Find the displayed image and crop rectangle under the mouse."""
         if not self.current_preview_images or self.config_mode or self.bezel_conifg_mode:
+            return None
+        if self.desktop_layout_enabled and self.desktop_preview.IsShown():
+            _canvas_size, _canvas_pos, rectangles = self._desktop_preview_rectangles()
+            for x, y, width, height in rectangles:
+                if x <= point.x < x + width and y <= point.y < y + height:
+                    return self.current_preview_images[0], self.dtop_canvas_relsz
             return None
         if self.use_multi_image or (self._last_use_ppi and self._last_spangroups):
             for index, (size, position) in enumerate(self.display_rel_sizes):
