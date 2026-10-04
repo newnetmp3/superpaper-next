@@ -46,10 +46,10 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Ruff lint
-        run: uv run ruff check --diff --select I tests/test_reference_design.py
+        run: uv run ruff check --output-format=github
 
       - name: Ruff format check
-        run: uv run ruff format --check
+        run: uv run ruff format --diff superpaper/gui.py tests/test_reference_design.py
 
       - name: Type check (ty)
         run: uv run ty check

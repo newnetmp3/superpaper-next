@@ -7,7 +7,6 @@ unit testing the image controls through the existing rendering test suite.
 import ast
 from pathlib import Path
 
-
 GUI = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
 
 
