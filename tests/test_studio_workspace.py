@@ -36,8 +36,11 @@ def test_studio_workspaces_reuse_real_widgets_and_callbacks():
     assert "self.create_studio_gallery()" in text
     for section in ("Wallpapers", "Displays", "Profiles", "Processing", "Advanced"):
         assert section in text
-    assert "self.sizer_bottom_half.Add(self.sizer_top_half" in text
-    assert "self.sizer_bottom_half.Add(self.studio_preview_tools" in text
+    assert "self.studio_canvas_column.Add(self.sizer_top_half" in text
+    assert "self.studio_canvas_column.Add(self.studio_preview_tools" in text
+    assert "self.studio_editor_row.Add(self.studio_canvas_column" in text
+    assert "self.studio_editor_row.Add(self.studio_inspector" in text
+    assert "self.sizer_bottom_half.Add(self.studio_editor_row" in text
     assert "self.sizer_bottom_half.Add(self.sizer_bottom_buttonrow" in text
     methods = {node.name for node in panel.body if isinstance(node, ast.FunctionDef)}
     for name in (
@@ -54,7 +57,7 @@ def test_studio_workspaces_reuse_real_widgets_and_callbacks():
 
 def test_switching_workspace_preserves_edits_and_refits_scroll():
     source = ast.unparse(_method("WallpaperSettingsPanel", "_set_studio_workspace"))
-    assert "self.sizer_bottom_half.Show(section, show=key == name)" in source
+    assert "self.studio_inspector.Show(section, show=key == name)" in source
     assert "self.FitInside()" in source
     assert "self.Scroll(0, 0)" in source
     assert "self.populate_fields(" not in source
@@ -162,3 +165,60 @@ def test_old_profile_defaults_are_neutral(profile_modules, tmp_path):
     assert "local_saturation=" not in text
     loaded = data.parse_profile_file(file)
     assert (loaded.local_brightness, loaded.local_contrast, loaded.local_saturation) == (0, 0, 0)
+
+
+def test_wallpaper_sources_are_collapsed_under_preview_by_default():
+    constructor = ast.unparse(_method("WallpaperSettingsPanel", "__init__"))
+    assert "self.studio_canvas_column.Add(self.sizer_settings_right" in constructor
+    assert "self.studio_canvas_column.Hide(self.sizer_settings_right)" in constructor
+    assert "self.studio_inspector.Add(self.sizer_setting_sizers" not in constructor
+    toggle = ast.unparse(_method("WallpaperSettingsPanel", "_studio_toggle_sources"))
+    assert "self._sources_expanded = not self._sources_expanded" in toggle
+    assert "self.studio_canvas_column.Show(" in toggle
+
+
+def test_right_inspector_contains_real_image_placement_controls():
+    constructor = ast.unparse(_method("WallpaperSettingsPanel", "__init__"))
+    sidebar = ast.unparse(_method("WallpaperSettingsPanel", "create_studio_navigation"))
+    assert "self.studio_inspector.Add(self.studio_image_card" in constructor
+    assert "self.studio_inspector.Add(self.studio_fit_row" in constructor
+    assert "self.sizer_setting_sizers.Add(self.sizer_settings_left" in constructor
+    assert "self.studio_image_thumbnail" in sidebar
+    assert "self.studio_change_image.Bind(wx.EVT_BUTTON, self.onBrowsePaths)" in sidebar
+    assert "self.studio_fit_choice.Bind(wx.EVT_CHOICE, self._studio_fit_changed)" in sidebar
+
+
+def test_new_fit_dropdown_uses_existing_advanced_span_renderer():
+    method = ast.unparse(_method("WallpaperSettingsPanel", "_studio_fit_changed"))
+    assert "self.radiobox_spanmode.SetSelection(value)" in method
+    assert "self.onSpanRadio(None)" in method
+    assert "self.studio_fit_choice.SetSelection(self.radiobox_spanmode.GetSelection())" in method
+    load = ast.unparse(_method("WallpaperSettingsPanel", "populate_fields"))
+    assert "self.studio_fit_choice.SetSelection(self.radiobox_spanmode.GetSelection())" in load
+
+
+def test_inspector_thumbnail_shows_original_source_not_ai_output():
+    source = ast.unparse(_method("WallpaperSettingsPanel", "_studio_refresh_image_card"))
+    assert "self.wpprev_pnl.current_preview_images" in source
+    assert "ImageOps.exif_transpose(image)" in source
+    assert "self.studio_image_thumbnail.SetBitmap" in source
+    assert "prepare_cloud_upscaled_image" not in source
+    assert "apply_image_shader" not in source
+
+
+def test_gallery_replaces_canvas_only_in_profiles_workspace():
+    source = ast.unparse(_method("WallpaperSettingsPanel", "_set_studio_workspace"))
+    assert "self.studio_canvas_column.Show(self.sizer_gallery" in source
+    assert "self.studio_canvas_column.Show(self.sizer_top_half" in source
+    assert "self.studio_inspector.Show(self.studio_fit_row" in source
+    assert "name == 'Profiles'" in source
+    assert "name == 'Wallpapers'" in source
+
+
+def test_preview_monitor_numbers_are_human_readable():
+    method = ast.unparse(_method("WallpaperPreviewPanel", "draw_monitor_numbers"))
+    assert "Monitor {index + 1}" in method
+    assert "DrawRoundedRectangle" in method
+    resolutions = ast.unparse(_method("WallpaperPreviewPanel", "draw_monitor_sizes"))
+    assert "disp.resolution[0]" in resolutions
+    assert "disp.resolution[1]" in resolutions
