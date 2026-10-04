@@ -858,6 +858,11 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         )
         self.studio_compare.Bind(wx.EVT_CHECKBOX, self._studio_toggle_compare)
         self.studio_preview_tools.Add(self.studio_compare, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.studio_split_slider = wx.Slider(self, value=50, minValue=0, maxValue=100, size=wx.Size(130, -1))
+        self.studio_split_slider.SetToolTip("Move the dividing line between original and locally adjusted preview.")
+        self.studio_split_slider.Enable(False)
+        self.studio_split_slider.Bind(wx.EVT_SLIDER, self._studio_compare_position)
+        self.studio_preview_tools.Add(self.studio_split_slider, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
         self.studio_preview_tools.AddStretchSpacer()
         self.studio_preview_tools.Add(
             wx.StaticText(self, label="Preview view:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
@@ -984,6 +989,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.studio_inspector.Show(section, show=key == name, recursive=True)
         self.studio_inspector.Show(self.studio_image_card, show=name == "Wallpapers", recursive=True)
         self.studio_inspector.Show(self.studio_fit_row, show=name == "Wallpapers", recursive=True)
+        self.sizer_displays.Show(
+            self.sizer_setting_adv, show=name == "Displays" and self.show_advanced_settings, recursive=True
+        )
         self.studio_canvas_column.Show(self.sizer_top_half, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_preview_tools, show=name != "Profiles")
         self.studio_canvas_column.Show(self.studio_source_tools, show=name == "Wallpapers")
@@ -1082,7 +1090,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def _studio_toggle_compare(self, event):
         self.wpprev_pnl.compare_original = self.studio_compare.GetValue()
+        self.studio_split_slider.Enable(self.studio_compare.GetValue())
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+
+    def _studio_compare_position(self, event):
+        self.wpprev_pnl.compare_fraction = self.studio_split_slider.GetValue() / 100.0
+        if self.wpprev_pnl.compare_original:
+            self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
 
     def _refresh_studio_monitor_options(self):
         count = len(self.display_sys.disp_list)
@@ -1570,7 +1584,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
     def show_adv_setting_sizer(self, show_bool):
         """Show/Hide the sizer for advanced spanning settings."""
         self.sizer_displays.Show(
-            self.sizer_setting_adv, show=show_bool and self._workspace == "Displays", recursive=True
+            self.sizer_setting_adv, show=show_bool and getattr(self, "_workspace", "") == "Displays", recursive=True
         )
         self.toggle_bezel_buttons(enable_config_butt=True)
         # To only reveal sizer sit no frame resize
@@ -2502,7 +2516,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self._refresh_local_shader_options("")
         self._sync_cloud_quality_controls()
         self.studio_compare.SetValue(False)
+        self.studio_split_slider.SetValue(50)
+        self.studio_split_slider.Enable(False)
         self.wpprev_pnl.compare_original = False
+        self.wpprev_pnl.compare_fraction = 0.5
         self.studio_monitor_choice.SetSelection(0)
         self.wpprev_pnl.focus_monitor = 0
 
@@ -2693,7 +2710,7 @@ class WallpaperPreviewPanel(wx.Panel):
     """
 
     def __init__(self, parent, display_sys, image_list=None, use_ppi_px=False, use_multi_image=False):
-        self.preview_size = (1080, 400)
+        self.preview_size = (1080, 315)
         wx.Panel.__init__(self, parent, size=wx.Size(*self.preview_size))
         self.frame = parent
 
@@ -2727,6 +2744,7 @@ class WallpaperPreviewPanel(wx.Panel):
         self.sharpen = 0
         self.tone = (0, 0, 0)
         self.compare_original = False
+        self.compare_fraction = 0.5
         self.focus_monitor = 0
         self._last_use_ppi = use_ppi_px
         self._last_use_multi = use_multi_image
@@ -3033,8 +3051,8 @@ class WallpaperPreviewPanel(wx.Panel):
                 pil = resize_to_fill(prepared, size, quality="fast", zoom=self.zoom, offset=self.offset)
                 if self.compare_original and (self.sharpen or any(self.tone)):
                     plain = resize_to_fill(oriented, size, quality="fast", zoom=self.zoom, offset=self.offset)
-                    half = pil.width // 2
-                    pil.paste(plain.crop((0, 0, half, pil.height)), (0, 0))
+                    divider = round(pil.width * self.compare_fraction)
+                    pil.paste(plain.crop((0, 0, divider, pil.height)), (0, 0))
         except OSError, UnidentifiedImageError:
             msg = (
                 f"Opening image '{fname}' failed with PIL.UnidentifiedImageError."
