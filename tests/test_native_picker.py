@@ -111,7 +111,10 @@ def _change_image_action():
     tree = ast.parse(gui.read_text(encoding="utf-8"))
     panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperSettingsPanel")
     method = next(node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "onChangeImage")
-    namespace = {"source_identity": source_identity}
+    namespace = {
+        "source_identity": source_identity,
+        "wx": SimpleNamespace(LIST_STATE_SELECTED=1, LIST_STATE_FOCUSED=2),
+    }
     exec(compile(ast.Module(body=[method], type_ignores=[]), "<change-image>", "exec"), namespace)
     return namespace["onChangeImage"]
 
@@ -140,6 +143,10 @@ class FakeSourceList:
     def Select(self, index):
         self.selected = index
 
+    def SetItemState(self, index, state, mask):
+        if state & mask:
+            self.selected = index
+
 
 def test_change_image_replaces_only_selected_monitor_without_discarding_others(tmp_path):
     new = str(tmp_path / "new.png")
@@ -149,6 +156,7 @@ def test_change_image_replaces_only_selected_monitor_without_discarding_others(t
     previews, edits = [], []
     panel = SimpleNamespace(
         path_listctrl=sources,
+        _pending_source_replacements={},
         _choose_native_sources=lambda **_kwargs: [new],
         _choose_source_target=lambda index: sources.GetItemText(index, 0),
         append_to_listctrl=lambda row: sources.rows.append(row),
@@ -161,6 +169,7 @@ def test_change_image_replaces_only_selected_monitor_without_discarding_others(t
     assert ["0", original] not in sources.rows
     assert previews == [new]
     assert edits == [True]
+    assert panel._pending_source_replacements == {"0": new}
 
 
 def test_cancel_native_change_image_does_not_mutate_any_sources(tmp_path):
