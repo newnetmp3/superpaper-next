@@ -171,7 +171,9 @@ def test_apply_handler_never_updates_live_profile_selection(profile_modules, tmp
 def test_identical_source_lists_use_distinct_display_indices(profile_modules, tmp_path):
     data, _ = profile_modules
     shared = image(tmp_path, "shared.png")
-    profile = working_profile(data, "duplicate-groups", [[shared], [shared]], spanmode="multi", selected=[shared, shared])
+    profile = working_profile(
+        data, "duplicate-groups", [[shared], [shared]], spanmode="multi", selected=[shared, shared]
+    )
     serialized = profile._serialize()
     assert f"display0paths={shared}" in serialized
     assert f"display1paths={shared}" in serialized
@@ -183,7 +185,9 @@ def test_preview_uses_same_complete_selection_as_multi_monitor_renderer(tmp_path
     path = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     klass = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperSettingsPanel")
-    handler = next(node for node in klass.body if isinstance(node, ast.FunctionDef) and node.name == "_preview_source_path")
+    handler = next(
+        node for node in klass.body if isinstance(node, ast.FunctionDef) and node.name == "_preview_source_path"
+    )
     namespace = {"os": os, "wpproc": SimpleNamespace(G_SUPPORTED_IMAGE_EXTENSIONS=(".png",))}
     exec(compile(ast.Module(body=[handler], type_ignores=[]), "<preview-handler>", "exec"), namespace)
     left = image(tmp_path, "left.png")
