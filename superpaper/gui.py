@@ -14,7 +14,7 @@ from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 
 import superpaper.sp_logging as sp_logging
 import superpaper.wallpaper_processing as wpproc
-from superpaper.cloud_upscale import UPSCALE_MODES, normalize_scale_mode, normalize_sharpen
+from superpaper.cloud_upscale import UPSCALE_MODES, locally_sharpen, normalize_scale_mode, normalize_sharpen
 from superpaper.configuration_dialogs import (
     BrowsePaths,
     DisplayPositionEntry,
@@ -390,8 +390,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sld_cloud_sharpen = wx.Slider(statbox_parent_zoom, -1, 0, 0, 100, style=wx.SL_HORIZONTAL)
         self.st_cloud_sharpen = wx.StaticText(statbox_parent_zoom, -1, "0", size=wx.Size(40, -1), style=wx.ALIGN_RIGHT)
         self.sld_cloud_sharpen.SetToolTip(
-            "Optional sharpness after AI upscaling (0 = original enhancement). "
-            "Computed locally from the cached AI image: adjusting this never uses cloud credits."
+            "Sharpen the wallpaper locally with or without Cloud AI (0 = unchanged). "
+            "The preview uses the original image; changing sharpness never spends cloud credits."
         )
         self.sld_cloud_sharpen.Bind(wx.EVT_SLIDER, self._on_cloud_quality_changed)
         cloud_grid.Add(cloud_sharpen_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 5)
@@ -799,6 +799,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         sharpen = normalize_sharpen(getattr(profile, "cloud_upscale_sharpen", 0))
         self.sld_cloud_sharpen.SetValue(sharpen)
         self.st_cloud_sharpen.SetLabel(str(sharpen))
+        self.wpprev_pnl.sharpen = sharpen
         self._sync_cloud_quality_controls()
 
         # Update wallpaper preview from selected profile
@@ -1182,9 +1183,11 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.onZoomOffsetChange(None)
 
     def _sync_cloud_quality_controls(self):
-        enabled = self.cb_cloud_upscale.GetValue() and self.cb_cloud_upscale.IsEnabled()
-        self.ch_cloud_scale.Enable(enabled)
-        self.sld_cloud_sharpen.Enable(enabled)
+        cloud_enabled = self.cb_cloud_upscale.GetValue() and self.cb_cloud_upscale.IsEnabled()
+        self.ch_cloud_scale.Enable(cloud_enabled)
+        # Local sharpening belongs to the normal image pipeline and does not
+        # require network access or an enabled cloud upscaler.
+        self.sld_cloud_sharpen.Enable(self.sld_zoom.IsEnabled())
 
     def _on_cloud_upscale_changed(self, event):
         """Record consent; actual network requests run on the render worker."""
@@ -1192,8 +1195,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self._update_dirty_state()
 
     def _on_cloud_quality_changed(self, event):
-        """Record model and local sharpness without uploading anything."""
-        self.st_cloud_sharpen.SetLabel(str(self.sld_cloud_sharpen.GetValue()))
+        """Refresh source preview locally when sharpening changes."""
+        value = self.sld_cloud_sharpen.GetValue()
+        self.st_cloud_sharpen.SetLabel(str(value))
+        if value != self.wpprev_pnl.sharpen:
+            self.wpprev_pnl.sharpen = value
+            self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
         self._update_dirty_state()
 
     def onZoomOffsetChange(self, event):
@@ -2065,9 +2072,11 @@ class WallpaperPreviewPanel(wx.Panel):
         self.preview_img_list = []
         self.bmp_list = []
 
-        # Image zoom & positioning (whole-viewport, applied in resize_to_fill)
+        # Image zoom, positioning and local sharpening are previewed using
+        # the original image, without triggering any cloud inference.
         self.zoom = 1.0
         self.offset = (0.0, 0.0)
+        self.sharpen = 0
         self._last_use_ppi = use_ppi_px
         self._last_use_multi = use_multi_image
         self._last_spangroups = None
@@ -2358,7 +2367,8 @@ class WallpaperPreviewPanel(wx.Panel):
         try:
             with Image.open(fname) as source:
                 oriented = ImageOps.exif_transpose(source)
-                pil = resize_to_fill(oriented, size, quality="fast", zoom=self.zoom, offset=self.offset)
+                prepared = locally_sharpen(oriented, self.sharpen)
+                pil = resize_to_fill(prepared, size, quality="fast", zoom=self.zoom, offset=self.offset)
         except OSError, UnidentifiedImageError:
             msg = (
                 f"Opening image '{fname}' failed with PIL.UnidentifiedImageError."

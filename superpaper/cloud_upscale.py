@@ -128,20 +128,21 @@ def _request_remote_upscale(image, scale, cache_dir):
 def prepare_cloud_upscaled_image(
     image, source_path, target_size, *, zoom, enabled, cache_root, scale_mode="auto", sharpen=0
 ):
-    """Use cached/free cloud AI when needed; return original on any failure.
+    """Apply optional AI, then sharpen locally regardless of AI availability.
 
     Never request the network unless this specific profile opted in.
-    Cache hits work offline, and upload errors do not interrupt wallpaper use.
+    On disabled/failed/skipped cloud inference, sharpen the original image.
+    Cache hits work offline and sharpening is not part of the cloud cache key.
     """
     if not enabled:
-        return image
+        return locally_sharpen(image, sharpen)
     scale = selected_scale(image.size, target_size, zoom, mode=scale_mode)
     if scale is None or image.width * image.height > MAX_INPUT_PIXELS:
-        return image
+        return locally_sharpen(image, sharpen)
     # The x8 model can produce enormous bitmaps. Avoid spending remote GPU
     # time on outputs we would have to reject for exceeding memory limits.
     if image.width * image.height * scale * scale > MAX_OUTPUT_PIXELS:
-        return image
+        return locally_sharpen(image, sharpen)
     try:
         cached = cache_file_for_source(source_path, cache_root, scale)
         if cached.is_file():
@@ -152,10 +153,10 @@ def prepare_cloud_upscaled_image(
         cached.parent.mkdir(parents=True, exist_ok=True)
         remote_file = _request_remote_upscale(image, scale, cached.parent)
         if remote_file is None:
-            return image
+            return locally_sharpen(image, sharpen)
         enhanced = _usable_image(remote_file, image.size)
         if enhanced is None:
-            return image
+            return locally_sharpen(image, sharpen)
         # Persist the *validated* result atomically so later renders and
         # slideshows do not spend more limited free GPU quota.
         with tempfile.NamedTemporaryFile(suffix=".png", dir=cached.parent, delete=False) as target:
@@ -167,6 +168,6 @@ def prepare_cloud_upscaled_image(
             stage.unlink(missing_ok=True)
     except Exception as error:
         LOGGER.warning("Cloud upscale unavailable; using original wallpaper: %s", error)
-        return image
+        return locally_sharpen(image, sharpen)
     else:
         return locally_sharpen(enhanced, sharpen)
