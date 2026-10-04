@@ -18,7 +18,8 @@ def _colorful_source(size=(80, 48)):
 
 
 def _class(name):
-    path = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    root = Path(__file__).resolve().parents[1] / "superpaper"
+    path = root / ("wallpaper_preview_panel.py" if name == "WallpaperPreviewPanel" else "gui.py")
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name)
 
