@@ -1059,6 +1059,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         # the same serialization, so this stays clean without a deferred call.
         self._loading = False
         self._set_clean_baseline()
+        if hasattr(self, "studio_monitor_choice"):
+            self._refresh_studio_monitor_options()
 
     def paths_array_to_listctrl(self, paths_array):
         multi_img = self.use_multi_image or self.use_spangroups()
@@ -1219,6 +1221,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.profnames.append(prof.name)
         self.profnames.append("Create a new profile")
         self.choice_profiles.SetItems(self.profnames)
+        self._refresh_profile_gallery()
 
     def list_of_textctrl(self, ctrl_parent, num_disp, fraction=1 / 2):
         tcrtl_list = []
@@ -1840,6 +1843,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             sp_logging.G_LOGGER.info("onApply: validation failed, nothing applied.")
             return
         busy = wx.BusyCursor()
+        if hasattr(self, "studio_status"):
+            self.studio_status.SetLabel("Rendering wallpaper with the current settings...")
         # ProfileData parses from a file, so serialize the working copy to a
         # throwaway file (never the real profile) and render that. This reuses
         # the full ProfileData feature set (zoom/pan, span modes, selection)
@@ -1867,6 +1872,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                 live = self._loaded_profile_with_selection()
                 if live is not None:
                     live.set_selected_wallpaper(tmp_profile.selected, persist=True)
+            if hasattr(self, "studio_status"):
+                self.studio_status.SetLabel("Render finished. Check the desktop for the applied wallpaper.")
         finally:
             try:
                 os.remove(temp_file)
@@ -2105,6 +2112,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             # Saved state becomes the new clean baseline.
             self.list_of_profiles = self.parent_tray_obj.list_of_profiles
             self._set_clean_baseline()
+            self._refresh_profile_gallery()
+            if hasattr(self, "studio_status"):
+                self.studio_status.SetLabel(f"Profile saved: {tmp_profile.name}")
             del busy
             return saved_file
         else:
@@ -2358,6 +2368,8 @@ class WallpaperPreviewPanel(wx.Panel):
         self.zoom = 1.0
         self.offset = (0.0, 0.0)
         self.sharpen = 0
+        self.compare_original = False
+        self.focus_monitor = 0
         self._last_use_ppi = use_ppi_px
         self._last_use_multi = use_multi_image
         self._last_spangroups = None
@@ -2621,6 +2633,8 @@ class WallpaperPreviewPanel(wx.Panel):
                 crop = safe_sub_bitmap(bmp_clr, wx.Rect(pos, sz))
                 st_bmp.SetBitmap(crop)
                 # st_bmp.Show()
+        for index, bitmap in enumerate(self.preview_img_list):
+            bitmap.Show(self.focus_monitor == 0 or index == self.focus_monitor - 1)
         self.draw_monitor_numbers(use_ppi_px)
         self.Refresh()
 
@@ -2650,6 +2664,10 @@ class WallpaperPreviewPanel(wx.Panel):
                 oriented = ImageOps.exif_transpose(source)
                 prepared = locally_sharpen(oriented, self.sharpen)
                 pil = resize_to_fill(prepared, size, quality="fast", zoom=self.zoom, offset=self.offset)
+                if self.compare_original and self.sharpen:
+                    plain = resize_to_fill(oriented, size, quality="fast", zoom=self.zoom, offset=self.offset)
+                    half = pil.width // 2
+                    pil.paste(plain.crop((0, 0, half, pil.height)), (0, 0))
         except OSError, UnidentifiedImageError:
             msg = (
                 f"Opening image '{fname}' failed with PIL.UnidentifiedImageError."
