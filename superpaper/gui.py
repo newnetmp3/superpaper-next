@@ -3381,9 +3381,11 @@ class WallpaperPreviewPanel(wx.Panel):
             except ValueError:
                 return []
         else:
-            rectangles = [
-                (*bitmap.GetPosition(), *bitmap.GetSize()) for bitmap in self.preview_img_list
-            ]
+            rectangles = []
+            for bitmap in self.preview_img_list:
+                position = bitmap.GetPosition()
+                size = bitmap.GetSize()
+                rectangles.append((position.x, position.y, size.width, size.height))
         regions = []
         for index, (left, top, width, height) in enumerate(rectangles):
             if index >= len(self._comparison_crops):
