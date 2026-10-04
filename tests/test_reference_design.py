@@ -180,3 +180,14 @@ def test_local_comparison_resizes_instead_of_forcing_a_wide_window():
     assert "scale = min(" in painter
     constructor = _method("WallpaperSettingsPanel", "create_studio_navigation")
     assert "self.studio_processing_bitmap = StudioComparisonPanel(self)" in constructor
+
+
+def test_preview_help_button_uses_native_theme_size_without_gtk_overflow():
+    controls = _method("WallpaperPreviewPanel", "create_buttons")
+    assert 'self.button_help = wx.Button(self, label="Help", name="butt_help")' in controls
+    assert "size=wx.Size(27, 27)" not in controls
+    assert "self.button_help.Bind(wx.EVT_BUTTON, self.onHelp)" in controls
+
+    positioning = _method("WallpaperPreviewPanel", "move_buttons")
+    assert "self.button_help.GetBestSize()" in positioning
+    assert "self.button_help.SetPosition" in positioning
