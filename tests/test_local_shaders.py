@@ -390,7 +390,9 @@ def test_baseline_diagnostic_distinguishes_external_device_success(monkeypatch):
 
     def render(command, **_kwargs):
         calls.append(command)
-        return SimpleNamespace(returncode=0 if "-init_hw_device" in command else 234, stderr="Error initializing filters")
+        return SimpleNamespace(
+            returncode=0 if "-init_hw_device" in command else 234, stderr="Error initializing filters"
+        )
 
     monkeypatch.setattr(local_shaders.subprocess, "run", render)
     detail = local_shaders.diagnose_ffmpeg_backend("/usr/bin/ffmpeg")
