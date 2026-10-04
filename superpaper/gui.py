@@ -16,7 +16,6 @@ import superpaper.sp_logging as sp_logging
 import superpaper.wallpaper_processing as wpproc
 from superpaper.cloud_upscale import UPSCALE_MODES, locally_sharpen, normalize_scale_mode, normalize_sharpen
 from superpaper.configuration_dialogs import (
-    BrowsePaths,
     DisplayPositionEntry,
     HelpFrame,
     HelpPopup,
@@ -35,6 +34,7 @@ from superpaper.data import (
 from superpaper.image_adjustments import apply_local_adjustments, normalize_adjustment, split_local_preview
 from superpaper.local_shaders import ShaderImportError, available_shaders, import_shader_pack, normalize_shader
 from superpaper.message_dialog import show_message_dialog
+from superpaper.native_picker import NativePickerError, pick_kde_paths
 from superpaper.preview_geometry import (
     comparison_drag_fraction,
     comparison_hit_region,
@@ -47,7 +47,7 @@ from superpaper.preview_geometry import (
     wheel_scroll_units,
 )
 from superpaper.profile_id import ProfileId, ProfileIdError
-from superpaper.source_paths import source_identity
+from superpaper.source_paths import IMAGE_EXTENSIONS, source_identity
 from superpaper.sp_paths import RESOURCES_PATH, TRAY_ICON
 from superpaper.wallpaper_processing import (
     change_wallpaper_job,
@@ -703,9 +703,11 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_setting_paths.Add(self.path_listctrl, 1, wx.CENTER | wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 5)
         # Buttons
         self.sizer_setting_paths_buttons = wx.WrapSizer(wx.HORIZONTAL)
-        self.button_browse = wx.Button(self.statbox_parent_paths, label="Browse")
+        self.button_browse = wx.Button(self.statbox_parent_paths, label="Add images...")
+        self.button_browse_folders = wx.Button(self.statbox_parent_paths, label="Add folder...")
         self.button_remove_source = wx.Button(self.statbox_parent_paths, label="Remove selected")
         self.button_browse.Bind(wx.EVT_BUTTON, self.onBrowsePaths)
+        self.button_browse_folders.Bind(wx.EVT_BUTTON, self.onAddFolderSource)
         self.button_remove_source.Bind(wx.EVT_BUTTON, self.onRemoveSource)
         # Wheel input over the entire source group belongs to the outer window,
         # not just to the wx.ListCtrl that would otherwise consume it.
@@ -713,10 +715,12 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.statbox_parent_paths,
             st_paths_info,
             self.button_browse,
+            self.button_browse_folders,
             self.button_remove_source,
         ):
             control.Bind(wx.EVT_MOUSEWHEEL, self._on_paths_wheel)
         self.sizer_setting_paths_buttons.Add(self.button_browse, 0, wx.CENTER | wx.ALL, 5)
+        self.sizer_setting_paths_buttons.Add(self.button_browse_folders, 0, wx.CENTER | wx.ALL, 5)
         self.sizer_setting_paths_buttons.Add(self.button_remove_source, 0, wx.CENTER | wx.ALL, 5)
         # add button sizer to parent paths sizer
         self.sizer_setting_paths.Add(self.sizer_setting_paths_buttons, 0, wx.CENTER | wx.EXPAND | wx.ALL, 0)
@@ -1108,7 +1112,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_image_name = wx.StaticText(self, label="No image selected")
         self.studio_image_card.Add(self.studio_image_name, 0, wx.EXPAND | wx.BOTTOM, 7)
         self.studio_change_image = StudioActionButton(self, "Change Image...")
-        self.studio_change_image.Bind(wx.EVT_BUTTON, self.onBrowsePaths)
+        self.studio_change_image.Bind(wx.EVT_BUTTON, self.onChangeImage)
         self.studio_image_card.Add(self.studio_change_image, 0, wx.EXPAND)
 
         self.studio_fit_row = wx.BoxSizer(wx.VERTICAL)
