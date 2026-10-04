@@ -84,4 +84,6 @@ def test_gui_still_exports_existing_studio_controls():
     gui = (root / "gui.py").read_text(encoding="utf-8")
     assert "from superpaper.studio_widgets import StudioActionButton, StudioNavigationButton, StudioSegmentButton" in gui
     assert "class WallpaperSettingsPanel(wx.ScrolledWindow):" in gui
-    assert "class WallpaperPreviewPanel(wx.Panel):" in gui
+    assert "from superpaper.wallpaper_preview_panel import WallpaperPreviewPanel" in gui
+    preview = (root / "wallpaper_preview_panel.py").read_text(encoding="utf-8")
+    assert "class WallpaperPreviewPanel(wx.Panel):" in preview
