@@ -235,7 +235,16 @@ def shader_error_detail(stderr):
         lower = line.lower()
         if any(
             hint in lower
-            for hint in ("error", "fail", "unsupported", "not supported", "missing", "invalid", "impossible", "no device")
+            for hint in (
+                "error",
+                "fail",
+                "unsupported",
+                "not supported",
+                "missing",
+                "invalid",
+                "impossible",
+                "no device",
+            )
         ):
             # Keep the preceding diagnostic context for libplacebo or shader
             # compilation errors. Avoid repeating generic Vulkan layer lists.
