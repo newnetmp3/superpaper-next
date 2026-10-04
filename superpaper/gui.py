@@ -896,7 +896,9 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_display_editor = wx.BoxSizer(wx.VERTICAL)
         self.studio_display_editor.Add(
             wx.StaticText(self, label="DISPLAY LAYOUT - choose a monitor to focus its preview"),
-            0, wx.BOTTOM, 9,
+            0,
+            wx.BOTTOM,
+            9,
         )
         tiles = wx.BoxSizer(wx.HORIZONTAL)
         for index, display in enumerate(self.display_sys.disp_list):
@@ -914,9 +916,13 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_display_editor.Add(arrange, 0, wx.ALIGN_LEFT)
         self.studio_display_editor.Add(
             wx.StaticText(
-                self, label="Drag the monitors in the preview, then Save there. "
-                "Use the Displays system settings to persist calibration."
-            ), 0, wx.TOP, 9,
+                self,
+                label="Drag the monitors in the preview, then Save there. "
+                "Use the Displays system settings to persist calibration.",
+            ),
+            0,
+            wx.TOP,
+            9,
         )
 
         self.studio_source_tools = wx.BoxSizer(wx.HORIZONTAL)
@@ -1112,9 +1118,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
     def create_studio_gallery(self):
         """Profiles are displayed with actual wallpaper thumbnails."""
         gallery_header = wx.BoxSizer(wx.HORIZONTAL)
-        gallery_header.Add(
-            wx.StaticText(self, label="Saved profiles"), 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5
-        )
+        gallery_header.Add(wx.StaticText(self, label="Saved profiles"), 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
         self.studio_gallery_search = wx.SearchCtrl(self, style=wx.TE_PROCESS_ENTER)
         self.studio_gallery_search.SetDescriptiveText("Search profiles...")
         self.studio_gallery_search.Bind(wx.EVT_TEXT, self._refresh_profile_gallery)
@@ -1160,7 +1164,8 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                             original.thumbnail((width, height), Image.Resampling.LANCZOS)
                             canvas = Image.new("RGB", (width, height), (29, 36, 46))
                             canvas.paste(
-                                original.convert("RGB"), ((width - original.width) // 2, (height - original.height) // 2)
+                                original.convert("RGB"),
+                                ((width - original.width) // 2, (height - original.height) // 2),
                             )
                             bitmap = wx.Bitmap.FromBuffer(width, height, canvas.tobytes())
                     except OSError, ValueError:
