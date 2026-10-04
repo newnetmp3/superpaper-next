@@ -3487,9 +3487,7 @@ class WallpaperPreviewPanel(wx.Panel):
                         if has_adjustments
                         else pil
                     )
-                    pil = split_local_preview(
-                        plain, pil, self.compare_fraction, has_adjustments=has_adjustments
-                    )
+                    pil = split_local_preview(plain, pil, self.compare_fraction, has_adjustments=has_adjustments)
         except OSError, UnidentifiedImageError:
             msg = (
                 f"Opening image '{fname}' failed with PIL.UnidentifiedImageError."
