@@ -191,3 +191,19 @@ def test_preview_help_button_uses_native_theme_size_without_gtk_overflow():
     positioning = _method("WallpaperPreviewPanel", "move_buttons")
     assert "self.button_help.GetBestSize()" in positioning
     assert "self.button_help.SetPosition" in positioning
+
+
+def test_shader_dropdown_starts_with_modes_and_hides_individual_hooks():
+    form = _method("WallpaperSettingsPanel", "create_sizer_settings_left")
+    assert "Show individual shaders (advanced)" in form
+    assert "self.cb_shader_advanced.SetValue(False)" in form
+    assert "self.cb_shader_advanced.Bind(wx.EVT_CHECKBOX, self._on_shader_advanced_toggled)" in form
+    options = _method("WallpaperSettingsPanel", "_refresh_local_shader_options")
+    assert "name.startswith('Anime4K_Mode_')" in options
+    assert "self.cb_shader_advanced.GetValue()" in options
+    assert "if selected and selected not in names" in options
+    assert "self.ch_local_shader.SetSelection(self._shader_names.index(selected))" in options
+    toggle = _method("WallpaperSettingsPanel", "_on_shader_advanced_toggled")
+    assert "self._refresh_local_shader_options(selected)" in toggle
+    # Toggling advanced view must not count as editing the selected preset.
+    assert "self._update_dirty_state()" not in toggle

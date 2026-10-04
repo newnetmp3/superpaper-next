@@ -226,11 +226,36 @@ def shader_filtergraph(dimensions, hook, variant):
 
 
 def shader_error_detail(stderr):
-    """Preserve the first useful Vulkan/GLSL errors, not only FFmpeg's footer."""
+    """Find the actual filter/device error rather than flooding logs with Vulkan layers."""
     lines = [line.strip() for line in stderr.splitlines() if line.strip()]
     if not lines:
         return "No FFmpeg diagnostic output; verify FFmpeg libplacebo and Vulkan support."
-    return "\n".join((lines[:12] + lines[-4:]) if len(lines) > 16 else lines)[:4000]
+    useful = []
+    for index, line in enumerate(lines):
+        lower = line.lower()
+        if any(
+            hint in lower
+            for hint in (
+                "error",
+                "fail",
+                "unsupported",
+                "not supported",
+                "missing",
+                "invalid",
+                "impossible",
+                "no device",
+            )
+        ):
+            # Keep the preceding diagnostic context for libplacebo or shader
+            # compilation errors. Avoid repeating generic Vulkan layer lists.
+            for item in lines[max(0, index - 1) : index + 1]:
+                if item not in useful and "VK_LAYER_" not in item and "Supported layers:" not in item:
+                    useful.append(item)
+    if not useful:
+        useful = [line for line in lines if "libplacebo" in line.lower() or "vulkan" in line.lower()][:8]
+    if not useful:
+        useful = lines[-8:]
+    return "\n".join(useful)[:4000]
 
 
 def diagnose_ffmpeg_backend(ffmpeg):
