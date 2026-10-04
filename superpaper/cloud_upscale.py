@@ -14,7 +14,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 SPACE_ID = "Nick088/Real-ESRGAN_Pytorch"
 CACHE_VERSION = "nick088-real-esrgan-v1"
@@ -25,6 +25,37 @@ MAX_OUTPUT_BYTES = 120_000_000
 JOB_TIMEOUT_SECONDS = 120
 
 LOGGER = logging.getLogger(__name__)
+UPSCALE_MODES = ("auto", "2", "4", "8")
+
+
+def normalize_scale_mode(mode):
+    """Validate provider-supported factors; keep older profiles on Auto."""
+    value = str(mode).strip().lower()
+    return value if value in UPSCALE_MODES else "auto"
+
+
+def normalize_sharpen(amount):
+    """Local sharpness percentage from 0 (unchanged) to 100 (strong)."""
+    try:
+        return max(0, min(100, int(amount)))
+    except TypeError, ValueError:
+        return 0
+
+
+def selected_scale(source_size, target_size, zoom=1.0, *, mode="auto"):
+    """Choose provider x2/x4/x8; Auto retains the previous credit-saving behavior."""
+    normalized = normalize_scale_mode(mode)
+    if normalized == "auto":
+        return recommended_scale(source_size, target_size, zoom)
+    return int(normalized) if min(*source_size, *target_size) > 0 else None
+
+
+def locally_sharpen(image, amount):
+    """Sharpen a cached AI result without another cloud request."""
+    strength = normalize_sharpen(amount)
+    if not strength:
+        return image
+    return ImageEnhance.Sharpness(image).enhance(1.0 + strength / 100)
 
 
 def recommended_scale(source_size, target_size, zoom=1.0):
@@ -94,7 +125,9 @@ def _request_remote_upscale(image, scale, cache_dir):
         upload_path.unlink(missing_ok=True)
 
 
-def prepare_cloud_upscaled_image(image, source_path, target_size, *, zoom, enabled, cache_root):
+def prepare_cloud_upscaled_image(
+    image, source_path, target_size, *, zoom, enabled, cache_root, scale_mode="auto", sharpen=0
+):
     """Use cached/free cloud AI when needed; return original on any failure.
 
     Never request the network unless this specific profile opted in.
@@ -102,17 +135,19 @@ def prepare_cloud_upscaled_image(image, source_path, target_size, *, zoom, enabl
     """
     if not enabled:
         return image
-    scale = recommended_scale(image.size, target_size, zoom)
-    if scale is None:
+    scale = selected_scale(image.size, target_size, zoom, mode=scale_mode)
+    if scale is None or image.width * image.height > MAX_INPUT_PIXELS:
         return image
-    if image.width * image.height > MAX_INPUT_PIXELS:
+    # The x8 model can produce enormous bitmaps. Avoid spending remote GPU
+    # time on outputs we would have to reject for exceeding memory limits.
+    if image.width * image.height * scale * scale > MAX_OUTPUT_PIXELS:
         return image
     try:
         cached = cache_file_for_source(source_path, cache_root, scale)
         if cached.is_file():
             enhanced = _usable_image(cached, image.size)
             if enhanced is not None:
-                return enhanced
+                return locally_sharpen(enhanced, sharpen)
             cached.unlink(missing_ok=True)
         cached.parent.mkdir(parents=True, exist_ok=True)
         remote_file = _request_remote_upscale(image, scale, cached.parent)
@@ -134,4 +169,4 @@ def prepare_cloud_upscaled_image(image, source_path, target_size, *, zoom, enabl
         LOGGER.warning("Cloud upscale unavailable; using original wallpaper: %s", error)
         return image
     else:
-        return enhanced
+        return locally_sharpen(enhanced, sharpen)

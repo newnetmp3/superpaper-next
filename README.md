@@ -52,6 +52,24 @@ machine. A public community Space is not a service with guaranteed uptime,
 confidentiality, or long-term API compatibility. Avoid enabling it for private
 or sensitive pictures. Already-cached outputs may be used while offline.
 
+### Cloud upscale quality settings
+
+The public Real-ESRGAN Space exposes **2×, 4× and 8× image models**. Choose
+**Auto (when needed)** to preserve Superpaper's default, credit-saving behavior:
+the source image is enhanced only when display size/zoom requires it, selecting
+2× or 4×. You can explicitly select 2×, 4× or 8× for a different model, even
+when the source already covers the display. Larger models may require more time
+and output memory; the 8× option is skipped for images whose resulting pixel
+count would exceed the safety limit.
+
+**Sharpen (local)** adds optional detail crispness after the cloud result,
+from 0 (unchanged) to 100. It is local Pillow processing, **not** a remote AI
+quality or denoise slider. Changing sharpness never consumes new cloud credits,
+and neither does disabling and re-enabling the same model: the model output is
+cached separately from the sharpening choice. Switching between 2×, 4× and 8×
+can require one cloud job per new choice, while returning to a cached choice
+reuses its existing result. Both preferences are stored per profile.
+
 ### Matching the preview to an AI-upscaled wallpaper
 
 **The wallpaper preview always uses the original image.** The applied wallpaper
