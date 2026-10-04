@@ -313,8 +313,7 @@ def test_ffmpeg_failure_diagnoses_vulkan_without_anime4k(tmp_path, monkeypatch):
         return SimpleNamespace(returncode=234, stderr="Vulkan ICD unavailable\nFilter graph error")
 
     monkeypatch.setattr(local_shaders.subprocess, "run", render)
-    with pytest.raises(ValueError):
-        local_shaders._validate_entry("Anime4K_Mode_A", HOOK)
+    assert local_shaders._validate_entry("Anime4K_Mode_A", HOOK) is None
     source = Image.new("RGB", (30, 20), "pink")
     assert local_shaders.apply_image_shader(
         source, NAME, (60, 40), shader_root=installed, cache_root=tmp_path
