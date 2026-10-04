@@ -264,7 +264,6 @@ def test_cloud_checkbox_cannot_push_reset_view_into_processing_inspector():
     assert "self._studio_sync_compare_workspace(name)" in switching
 
 
-
 def test_displays_hides_split_comparison_without_resetting_user_preference():
     """Exercise the workspace handler without importing wx on headless CI."""
     namespace = {}
