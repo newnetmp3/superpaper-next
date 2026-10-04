@@ -32,7 +32,7 @@ from superpaper.data import (
     parse_profile_file,
     save_managed_profile,
 )
-from superpaper.image_adjustments import apply_local_adjustments, normalize_adjustment
+from superpaper.image_adjustments import apply_local_adjustments, normalize_adjustment, split_local_preview
 from superpaper.local_shaders import ShaderImportError, available_shaders, import_shader_pack, normalize_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.preview_geometry import (
@@ -1017,6 +1017,10 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_split_slider.Enable(False)
         self.studio_split_slider.Bind(wx.EVT_SLIDER, self._studio_compare_position)
         self.studio_preview_tools.Add(self.studio_split_slider, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+        self.studio_compare_state = wx.StaticText(self, label="No local adjustments")
+        self.studio_compare_state.SetForegroundColour(wx.Colour(166, 197, 230))
+        self.studio_compare_state.Hide()
+        self.studio_preview_tools.Add(self.studio_compare_state, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 9)
         self.studio_preview_tools.AddStretchSpacer()
         self.studio_preview_tools.Add(
             wx.StaticText(self, label="Preview view:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6
@@ -1298,7 +1302,18 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
     def _studio_toggle_compare(self, event):
         self.wpprev_pnl.compare_original = self.studio_compare.GetValue()
         self.studio_split_slider.Enable(self.studio_compare.GetValue())
+        self.wpprev_pnl.compare_fraction = self.studio_split_slider.GetValue() / 100.0
+        self._studio_update_compare_feedback()
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
+
+    def _studio_update_compare_feedback(self):
+        """Explain when the split contains two identical, unedited images."""
+        enabled = self.studio_compare.GetValue()
+        if enabled:
+            has_edits = bool(self.wpprev_pnl.sharpen or any(self.wpprev_pnl.tone))
+            self.studio_compare_state.SetLabel("Blue divider" if has_edits else "No local edits (both sides match)")
+        self.studio_compare_state.Show(enabled)
+        self.studio_preview_tools.Layout()
 
     def _studio_compare_position(self, event):
         self.wpprev_pnl.compare_fraction = self.studio_split_slider.GetValue() / 100.0
@@ -2061,6 +2076,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             self.wpprev_pnl.sharpen = value
             self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
         self._studio_refresh_processing_preview()
+        self._studio_update_compare_feedback()
         self._update_dirty_state()
 
     def _refresh_local_shader_options(self, selected):
@@ -2128,6 +2144,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.wpprev_pnl.tone = tone
         self.wpprev_pnl.update_zoom_offset(self.wpprev_pnl.zoom, self.wpprev_pnl.offset)
         self._studio_refresh_processing_preview()
+        self._studio_update_compare_feedback()
         self._update_dirty_state()
 
     def _on_local_shader_changed(self, event):
@@ -2854,6 +2871,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.studio_compare.SetValue(False)
         self.studio_split_slider.SetValue(50)
         self.studio_split_slider.Enable(False)
+        self.studio_compare_state.Hide()
         self.wpprev_pnl.compare_original = False
         self.wpprev_pnl.compare_fraction = 0.5
         self.studio_monitor_choice.SetSelection(0)
@@ -3462,10 +3480,16 @@ class WallpaperPreviewPanel(wx.Panel):
                     prepared, brightness=self.tone[0], contrast=self.tone[1], saturation=self.tone[2]
                 )
                 pil = resize_to_fill(prepared, size, quality="fast", zoom=self.zoom, offset=self.offset)
-                if self.compare_original and (self.sharpen or any(self.tone)):
-                    plain = resize_to_fill(oriented, size, quality="fast", zoom=self.zoom, offset=self.offset)
-                    divider = round(pil.width * self.compare_fraction)
-                    pil.paste(plain.crop((0, 0, divider, pil.height)), (0, 0))
+                if self.compare_original:
+                    has_adjustments = bool(self.sharpen or any(self.tone))
+                    plain = (
+                        resize_to_fill(oriented, size, quality="fast", zoom=self.zoom, offset=self.offset)
+                        if has_adjustments
+                        else pil
+                    )
+                    pil = split_local_preview(
+                        plain, pil, self.compare_fraction, has_adjustments=has_adjustments
+                    )
         except OSError, UnidentifiedImageError:
             msg = (
                 f"Opening image '{fname}' failed with PIL.UnidentifiedImageError."
