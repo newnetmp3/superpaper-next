@@ -62,7 +62,8 @@ def pick_kde_paths(
     try:
         result = runner(command, capture_output=True, text=True, check=False)
     except OSError as exc:
-        raise NativePickerError(f"KDialog could not be started: {exc}") from exc
+        error_message = f"KDialog could not be started: {exc}"
+        raise NativePickerError(error_message) from exc
 
     if result.returncode == 1:
         return []
