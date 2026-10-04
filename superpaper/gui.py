@@ -2464,8 +2464,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
                     sources = [picker.GetPath()] if picker.ShowModal() == wx.ID_OK else []
             else:
                 wildcard = (
-                    "Images (*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.webp)|"
-                    "*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.webp"
+                    "Images (*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.webp)|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.webp"
                 )
                 flags = wx.FD_OPEN | wx.FD_FILE_MUST_EXIST
                 if multiple:
@@ -2516,9 +2515,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         if len(targets) == 1:
             return targets[0]
         choices = [f"{label.title()} {target}" for target in targets]
-        with wx.SingleChoiceDialog(
-            self, f"Choose a {label} for these images:", "Wallpaper target", choices
-        ) as picker:
+        with wx.SingleChoiceDialog(self, f"Choose a {label} for these images:", "Wallpaper target", choices) as picker:
             if picker.ShowModal() != wx.ID_OK:
                 return None
             return targets[picker.GetSelection()]
