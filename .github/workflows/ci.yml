@@ -46,9 +46,7 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Ruff lint
-        run: |
-          uv run ruff check --diff superpaper/wallpaper_preview_panel.py || true
-          uv run ruff check --output-format=github
+        run: uv run ruff check --output-format=github
 
       - name: Ruff format check
         run: |
