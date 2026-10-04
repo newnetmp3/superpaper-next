@@ -1052,14 +1052,18 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
 
     def create_studio_gallery(self):
         """Profiles are displayed with actual wallpaper thumbnails."""
-        self.sizer_gallery.Add(
-            wx.StaticText(self, label="Saved profiles - select a thumbnail to edit or apply."),
-            0,
-            wx.ALL,
-            5,
+        gallery_header = wx.BoxSizer(wx.HORIZONTAL)
+        gallery_header.Add(
+            wx.StaticText(self, label="Saved profiles"), 1, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5
         )
+        self.studio_gallery_search = wx.SearchCtrl(self, style=wx.TE_PROCESS_ENTER)
+        self.studio_gallery_search.SetDescriptiveText("Search profiles...")
+        self.studio_gallery_search.Bind(wx.EVT_TEXT, self._refresh_profile_gallery)
+        gallery_header.Add(self.studio_gallery_search, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        self.sizer_gallery.Add(gallery_header, 0, wx.EXPAND | wx.ALL, 5)
         self.gallery_list = wx.ListCtrl(self, style=wx.LC_ICON | wx.LC_SINGLE_SEL)
-        self.gallery_list.SetMinSize(wx.Size(550, 245))
+        self.gallery_list.SetMinSize(wx.Size(550, 345))
+        self.gallery_list.SetBackgroundColour(wx.Colour(20, 30, 45))
         self.gallery_list.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_gallery_selected)
         self.sizer_gallery.Add(self.gallery_list, 1, wx.EXPAND | wx.ALL, 5)
         actions = wx.BoxSizer(wx.HORIZONTAL)
@@ -1079,23 +1083,27 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
             return
         self._building_gallery = True
         try:
-            thumbs = wx.ImageList(156, 95)
+            width, height = 234, 134
+            thumbs = wx.ImageList(width, height)
             self.gallery_list.DeleteAllItems()
             self._gallery_profile_names = []
             current = self.tc_name.GetValue()
+            filter_text = self.studio_gallery_search.GetValue().strip().lower()
             for profile in self.list_of_profiles:
-                bitmap = wx.Bitmap.FromRGBA(156, 95, red=29, green=36, blue=46, alpha=255)
+                if filter_text and filter_text not in profile.name.lower():
+                    continue
+                bitmap = wx.Bitmap.FromRGBA(width, height, red=29, green=36, blue=46, alpha=255)
                 images = profile.next_wallpaper_files(peek=True)
                 if images and os.path.isfile(images[0]):
                     try:
                         with Image.open(images[0]) as source:
                             original = ImageOps.exif_transpose(source)
-                            original.thumbnail((156, 95), Image.Resampling.LANCZOS)
-                            canvas = Image.new("RGB", (156, 95), (29, 36, 46))
+                            original.thumbnail((width, height), Image.Resampling.LANCZOS)
+                            canvas = Image.new("RGB", (width, height), (29, 36, 46))
                             canvas.paste(
-                                original.convert("RGB"), ((156 - original.width) // 2, (95 - original.height) // 2)
+                                original.convert("RGB"), ((width - original.width) // 2, (height - original.height) // 2)
                             )
-                            bitmap = wx.Bitmap.FromBuffer(156, 95, canvas.tobytes())
+                            bitmap = wx.Bitmap.FromBuffer(width, height, canvas.tobytes())
                     except OSError, ValueError:
                         pass
                 thumb = thumbs.Add(bitmap)
