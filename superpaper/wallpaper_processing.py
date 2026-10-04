@@ -31,15 +31,15 @@ from superpaper.local_shaders import apply_image_shader
 from superpaper.message_dialog import show_message_dialog
 from superpaper.monitor_geometry import (
     compute_canvas,
-    compute_crop_tuples as compute_crop_tuples,
-    compute_ppi_corrected_res_array as compute_ppi_corrected_res_array,
+    compute_crop_tuples,  # noqa: F401  # keep legacy wallpaper_processing import
+    compute_ppi_corrected_res_array,  # noqa: F401  # keep legacy wallpaper_processing import
     compute_working_canvas,
-    get_all_centers as get_all_centers,
-    get_center as get_center,
-    get_horizontal_radius as get_horizontal_radius,
-    get_lefttop_from_center as get_lefttop_from_center,
-    get_rightbottom_from_lefttop as get_rightbottom_from_lefttop,
-    translate_crops as translate_crops,
+    get_all_centers,  # noqa: F401  # keep legacy wallpaper_processing import
+    get_center,  # noqa: F401  # keep legacy wallpaper_processing import
+    get_horizontal_radius,  # noqa: F401  # keep legacy wallpaper_processing import
+    get_lefttop_from_center,  # noqa: F401  # keep legacy wallpaper_processing import
+    get_rightbottom_from_lefttop,  # noqa: F401  # keep legacy wallpaper_processing import
+    translate_crops,  # noqa: F401  # keep legacy wallpaper_processing import
 )
 from superpaper.sp_paths import CONFIG_PATH, TEMP_PATH
 from superpaper.sp_platform import IS_LINUX, IS_MACOS, IS_WINDOWS, host_spawn_env
