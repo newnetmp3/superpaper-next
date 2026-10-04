@@ -622,7 +622,7 @@ class WallpaperSettingsPanel(wx.ScrolledWindow):
         self.sizer_processing_shaders.Add(
             wx.StaticText(
                 processing_parent,
-                label="Mode A: restore + upscale  •  Mode B: soft restore + upscale  •  Mode C: denoise + upscale",
+                label="Mode A: restore + upscale\nMode B: soft restore + upscale\nMode C: denoise + upscale",
             ),
             0,
             wx.LEFT | wx.RIGHT | wx.BOTTOM,
