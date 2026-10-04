@@ -319,3 +319,23 @@ def test_ffmpeg_failure_diagnoses_vulkan_without_anime4k(tmp_path, monkeypatch):
     assert len(commands) == 3
     assert "color=c=gray:s=64x64:d=0.1" in commands[-1]
     assert "libplacebo=w=64:h=64" in commands[-1]
+
+
+def test_shader_diagnostics_skip_verbose_vulkan_overlay_layer_listing():
+    log = "\n".join(
+        [
+            "[Vulkan @ 0x1234] Supported layers:",
+            "[Vulkan @ 0x1234] VK_LAYER_VALVE_steam_overlay_64",
+            "[Vulkan @ 0x1234] VK_LAYER_MESA_device_select",
+            "[Parsed_libplacebo_0 @ 0x1234] Failed creating Vulkan device",
+            "[AVFilterGraph @ 0x1234] Error initializing filters",
+            "Error opening output file -.",
+            "Error opening output files: Invalid argument",
+        ]
+    )
+    detail = local_shaders.shader_error_detail(log)
+    assert "Failed creating Vulkan device" in detail
+    assert "Error initializing filters" in detail
+    assert "Invalid argument" in detail
+    assert "VK_LAYER_VALVE" not in detail
+    assert "VK_LAYER_MESA" not in detail
