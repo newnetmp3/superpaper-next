@@ -93,7 +93,7 @@ def test_enabled_cloud_failure_falls_back_to_sharpened_original(tmp_path, monkey
 
 
 def test_preview_sharpens_original_not_cloud_source():
-    gui = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    gui = Path(__file__).resolve().parents[1] / "superpaper" / "wallpaper_preview_panel.py"
     tree = ast.parse(gui.read_text(encoding="utf-8"))
     panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
     render = [node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap"][-1]
@@ -194,7 +194,7 @@ def test_invalid_comparison_geometry_is_rejected():
 
 
 def test_preview_comparison_remains_local_even_when_cloud_is_enabled():
-    gui = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    gui = Path(__file__).resolve().parents[1] / "superpaper" / "wallpaper_preview_panel.py"
     tree = ast.parse(gui.read_text(encoding="utf-8"))
     panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
     method = [node for node in panel.body if isinstance(node, ast.FunctionDef) and node.name == "resize_and_bitmap"][-1]

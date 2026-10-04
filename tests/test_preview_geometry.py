@@ -131,7 +131,7 @@ def test_preview_uses_nearly_all_available_stage_width_without_stretching():
 
 def test_bitmap_children_receive_wallpaper_drag_events():
     """Displayed wx.StaticBitmaps eat mouse events unless bound directly."""
-    source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    source = Path(__file__).resolve().parents[1] / "superpaper" / "wallpaper_preview_panel.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
     preview = next(
         node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel"
@@ -161,7 +161,7 @@ def test_bitmap_children_receive_wallpaper_drag_events():
 
 def test_wallpaper_bitmap_drag_coordinates_are_relative_to_parent():
     """Simulate child-local and parent mouse events without wxPython."""
-    source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    source = Path(__file__).resolve().parents[1] / "superpaper" / "wallpaper_preview_panel.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
     preview = next(
         node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel"
@@ -239,7 +239,7 @@ def test_desktop_preview_handles_negative_offsets_and_empty_inputs():
 
 
 def test_desktop_preview_preserves_mouse_drags_and_calibration_mode():
-    source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    source = Path(__file__).resolve().parents[1] / "superpaper" / "wallpaper_preview_panel.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
     preview = next(
         node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel"

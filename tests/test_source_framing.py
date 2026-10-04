@@ -84,7 +84,7 @@ def test_profile_persists_original_selection_zoom_pan_and_cloud_flag(profile_mod
 
 
 def test_preview_uses_original_orientation_without_cloud_api_calls():
-    source = Path(__file__).resolve().parents[1] / "superpaper" / "gui.py"
+    source = Path(__file__).resolve().parents[1] / "superpaper" / "wallpaper_preview_panel.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
     panel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WallpaperPreviewPanel")
     # The first two declarations are @overload stubs; inspect the body.
